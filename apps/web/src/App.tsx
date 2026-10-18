@@ -58,6 +58,7 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
 function Remote({ connection, onForget }: { connection: SavedConnection; onForget: () => void }) {
   const remote = useRemote(connection);
   const [screen, setScreen] = useState<"player" | "search">("player");
+  const canSearch = remote.state?.capabilities?.search !== false;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] text-foreground">
@@ -66,11 +67,11 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
         <Button variant="ghost" size="icon" aria-label="Forget device" onClick={onForget}><Unplug className="size-5" /></Button>
       </header>
 
-      <div className="flex flex-1 flex-col">{screen === "player" ? <Player remote={remote} /> : <Search remote={remote} />}</div>
+      <div className="flex flex-1 flex-col">{screen === "player" || !canSearch ? <Player remote={remote} /> : <Search remote={remote} />}</div>
 
-      <nav aria-label="Main navigation" className="mt-4 grid grid-cols-2 rounded-2xl bg-muted p-1">
+      <nav aria-label="Main navigation" className={`mt-4 grid rounded-2xl bg-muted p-1 ${canSearch ? "grid-cols-2" : "grid-cols-1"}`}>
         <button className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm ${screen === "player" ? "bg-zinc-700" : "text-muted-foreground"}`} onClick={() => setScreen("player")}><Play className="size-4" />Now Playing</button>
-        <button className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm ${screen === "search" ? "bg-zinc-700" : "text-muted-foreground"}`} onClick={() => setScreen("search")}><SearchIcon className="size-4" />Search</button>
+        {canSearch && <button className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm ${screen === "search" ? "bg-zinc-700" : "text-muted-foreground"}`} onClick={() => setScreen("search")}><SearchIcon className="size-4" />Search</button>}
       </nav>
     </main>
   );
@@ -87,7 +88,8 @@ function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
         {state.artwork ? <img src={state.artwork} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-muted-foreground"><Play className="size-20" /></div>}
       </div>
       <h2 className="mt-8 truncate text-2xl font-bold">{state.title || "Nothing playing"}</h2>
-      <p className="mt-1 truncate text-muted-foreground">{state.artist || "Open YouTube Music on your Mac"}</p>
+      <p className="mt-1 truncate text-muted-foreground">{state.artist || "Start music on your Mac"}</p>
+      {state.source && <p className="mt-1 truncate text-xs text-muted-foreground">{state.source}</p>}
       <input aria-label="Playback position" type="range" min="0" max={Math.max(state.duration, 1)} value={shownPosition} onChange={(event) => setSeek(Number(event.target.value))} onPointerUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} onKeyUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} className="mt-7 w-full accent-primary" />
       <div className="mt-1 flex justify-between text-xs text-muted-foreground"><span>{time(shownPosition)}</span><span>{time(state.duration)}</span></div>
       <div className="mt-7 flex items-center justify-center gap-5">

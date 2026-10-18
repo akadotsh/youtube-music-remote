@@ -94,6 +94,8 @@ export function readPlayerState(document: Document): PlayerState {
     duration: finiteTime(video?.duration),
     position: finiteTime(video?.currentTime),
     isPlaying: Boolean(video && !video.paused && !video.ended),
+    source: "YouTube Music",
+    capabilities: { playPause: true, next: true, previous: true, seek: true, search: true },
   };
 }
 

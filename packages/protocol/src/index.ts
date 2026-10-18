@@ -28,6 +28,16 @@ export type PlayerState = {
   duration: number;
   position: number;
   isPlaying: boolean;
+  source?: string;
+  capabilities?: PlayerCapabilities;
+};
+
+export type PlayerCapabilities = {
+  playPause: boolean;
+  next: boolean;
+  previous: boolean;
+  seek: boolean;
+  search: boolean;
 };
 
 export type SearchResult = {
@@ -129,7 +139,20 @@ function isPlayerState(value: unknown): value is PlayerState {
     (value.artwork === undefined || typeof value.artwork === "string") &&
     isFiniteNonNegative(value.duration) &&
     isFiniteNonNegative(value.position) &&
-    typeof value.isPlaying === "boolean"
+    typeof value.isPlaying === "boolean" &&
+    (value.source === undefined || typeof value.source === "string") &&
+    (value.capabilities === undefined || isPlayerCapabilities(value.capabilities))
+  );
+}
+
+function isPlayerCapabilities(value: unknown): value is PlayerCapabilities {
+  return (
+    isRecord(value) &&
+    typeof value.playPause === "boolean" &&
+    typeof value.next === "boolean" &&
+    typeof value.previous === "boolean" &&
+    typeof value.seek === "boolean" &&
+    typeof value.search === "boolean"
   );
 }
 

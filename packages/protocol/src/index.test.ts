@@ -16,6 +16,22 @@ test("parses peer connection status", () => {
   });
 });
 
+test("parses player capabilities", () => {
+  const message = {
+    type: "STATE",
+    state: {
+      title: "Song",
+      artist: "Artist",
+      duration: 120,
+      position: 12,
+      isPlaying: true,
+      source: "YouTube Music",
+      capabilities: { playPause: true, next: true, previous: true, seek: true, search: false },
+    },
+  };
+  assert.deepEqual(parseClientMessage(JSON.stringify(message)), message);
+});
+
 test("rejects invalid and malformed messages", () => {
   assert.equal(parseClientMessage("{"), undefined);
   assert.equal(
