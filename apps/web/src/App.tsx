@@ -1,5 +1,5 @@
 import type { DeviceCredential, PlayerState } from "@yt-remote/protocol";
-import { Pause, Play, RotateCcw, SkipBack, SkipForward, Unplug } from "lucide-react";
+import { LoaderCircle, Pause, Play, RotateCcw, Search as SearchIcon, SkipBack, SkipForward, Unplug, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./components/ui/button";
 import { type SavedConnection, useRemote } from "./useRemote";
@@ -8,7 +8,6 @@ const storageKey = "yt-remote-connection";
 
 export default function App() {
   const [connection, setConnection] = useState<SavedConnection | undefined>(() => loadConnection());
-
   if (!connection) return <Pairing onPaired={setConnection} />;
   return <Remote connection={connection} onForget={() => forget(setConnection)} />;
 }
@@ -58,36 +57,72 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
 
 function Remote({ connection, onForget }: { connection: SavedConnection; onForget: () => void }) {
   const remote = useRemote(connection);
-  const state = remote.state ?? emptyState;
-  const [seek, setSeek] = useState<number>();
-  const shownPosition = seek ?? state.position;
+  const [screen, setScreen] = useState<"player" | "search">("player");
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 pb-[max(24px,env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] text-foreground">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] text-foreground">
       <header className="flex items-center justify-between">
         <div><h1 className="font-semibold">YouTube Music Remote</h1><p className="text-xs text-muted-foreground">{remote.status === "connected" ? (remote.peerConnected ? "Mac connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
         <Button variant="ghost" size="icon" aria-label="Forget device" onClick={onForget}><Unplug className="size-5" /></Button>
       </header>
 
-      <div className="flex flex-1 flex-col justify-center py-8">
-        <div className="aspect-square overflow-hidden rounded-3xl bg-muted shadow-2xl">
-          {state.artwork ? <img src={state.artwork} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-muted-foreground"><Play className="size-20" /></div>}
-        </div>
-        <h2 className="mt-8 truncate text-2xl font-bold">{state.title || "Nothing playing"}</h2>
-        <p className="mt-1 truncate text-muted-foreground">{state.artist || "Open YouTube Music on your Mac"}</p>
+      <div className="flex flex-1 flex-col">{screen === "player" ? <Player remote={remote} /> : <Search remote={remote} />}</div>
 
-        <input aria-label="Playback position" type="range" min="0" max={Math.max(state.duration, 1)} value={shownPosition} onChange={(event) => setSeek(Number(event.target.value))} onPointerUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} onKeyUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} className="mt-7 w-full accent-primary" />
-        <div className="mt-1 flex justify-between text-xs text-muted-foreground"><span>{time(shownPosition)}</span><span>{time(state.duration)}</span></div>
-
-        <div className="mt-7 flex items-center justify-center gap-5">
-          <Button variant="ghost" size="icon" aria-label="Previous track" onClick={() => remote.send({ type: "PREVIOUS" })}><SkipBack className="size-7 fill-current" /></Button>
-          <Button size="largeIcon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-8 fill-current" /> : <Play className="ml-1 size-8 fill-current" />}</Button>
-          <Button variant="ghost" size="icon" aria-label="Next track" onClick={() => remote.send({ type: "NEXT" })}><SkipForward className="size-7 fill-current" /></Button>
-        </div>
-        {remote.error && <button className="mt-6 flex items-center justify-center gap-2 text-sm text-red-400" onClick={() => remote.setError("")}><RotateCcw className="size-4" />{remote.error}</button>}
-      </div>
+      <nav aria-label="Main navigation" className="mt-4 grid grid-cols-2 rounded-2xl bg-muted p-1">
+        <button className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm ${screen === "player" ? "bg-zinc-700" : "text-muted-foreground"}`} onClick={() => setScreen("player")}><Play className="size-4" />Now Playing</button>
+        <button className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm ${screen === "search" ? "bg-zinc-700" : "text-muted-foreground"}`} onClick={() => setScreen("search")}><SearchIcon className="size-4" />Search</button>
+      </nav>
     </main>
   );
+}
+
+function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
+  const state = remote.state ?? emptyState;
+  const [seek, setSeek] = useState<number>();
+  const shownPosition = seek ?? state.position;
+
+  return (
+    <div className="flex flex-1 flex-col justify-center py-8">
+      <div className="aspect-square overflow-hidden rounded-3xl bg-muted shadow-2xl">
+        {state.artwork ? <img src={state.artwork} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-muted-foreground"><Play className="size-20" /></div>}
+      </div>
+      <h2 className="mt-8 truncate text-2xl font-bold">{state.title || "Nothing playing"}</h2>
+      <p className="mt-1 truncate text-muted-foreground">{state.artist || "Open YouTube Music on your Mac"}</p>
+      <input aria-label="Playback position" type="range" min="0" max={Math.max(state.duration, 1)} value={shownPosition} onChange={(event) => setSeek(Number(event.target.value))} onPointerUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} onKeyUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} className="mt-7 w-full accent-primary" />
+      <div className="mt-1 flex justify-between text-xs text-muted-foreground"><span>{time(shownPosition)}</span><span>{time(state.duration)}</span></div>
+      <div className="mt-7 flex items-center justify-center gap-5">
+        <Button variant="ghost" size="icon" aria-label="Previous track" onClick={() => remote.send({ type: "PREVIOUS" })}><SkipBack className="size-7 fill-current" /></Button>
+        <Button size="largeIcon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-8 fill-current" /> : <Play className="ml-1 size-8 fill-current" />}</Button>
+        <Button variant="ghost" size="icon" aria-label="Next track" onClick={() => remote.send({ type: "NEXT" })}><SkipForward className="size-7 fill-current" /></Button>
+      </div>
+      {remote.error && <ErrorMessage message={remote.error} dismiss={() => remote.setError("")} />}
+    </div>
+  );
+}
+
+function Search({ remote }: { remote: ReturnType<typeof useRemote> }) {
+  const [query, setQuery] = useState("");
+  const [searched, setSearched] = useState(false);
+
+  return (
+    <section className="py-8">
+      <h2 className="text-2xl font-bold">Search on your Mac</h2>
+      <form className="mt-5 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (!query.trim()) return; setSearched(true); remote.search(query.trim()); }}>
+        <input aria-label="Search songs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Song or artist" className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 outline-none focus:border-primary" />
+        <Button size="icon" aria-label="Search" disabled={remote.searching}><SearchIcon className="size-5" /></Button>
+      </form>
+      {remote.error && <ErrorMessage message={remote.error} dismiss={() => remote.setError("")} />}
+      {remote.searching && <div className="flex justify-center py-16"><LoaderCircle className="animate-spin text-muted-foreground" /></div>}
+      {!remote.searching && searched && remote.results.length === 0 && !remote.error && <p className="py-16 text-center text-muted-foreground">No songs found.</p>}
+      <ul className="mt-5 space-y-2">
+        {remote.results.map((result) => <li key={result.id}><button className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-muted" onClick={() => remote.send({ type: "PLAY_RESULT", resultId: result.id })}>{result.thumbnail ? <img src={result.thumbnail} alt="" className="size-14 rounded-lg object-cover" /> : <div className="size-14 rounded-lg bg-muted" />}<span className="min-w-0"><strong className="block truncate">{result.title}</strong><span className="block truncate text-sm text-muted-foreground">{result.artist}</span></span></button></li>)}
+      </ul>
+    </section>
+  );
+}
+
+function ErrorMessage({ message, dismiss }: { message: string; dismiss: () => void }) {
+  return <button className="mt-6 flex w-full items-center justify-center gap-2 text-sm text-red-400" onClick={dismiss}><RotateCcw className="size-4" />{message}<X className="size-3" /></button>;
 }
 
 const emptyState: PlayerState = { title: "", artist: "", duration: 0, position: 0, isPlaying: false };

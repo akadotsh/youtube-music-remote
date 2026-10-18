@@ -16,6 +16,7 @@ export function useRemote(connection: SavedConnection | undefined) {
   const [peerConnected, setPeerConnected] = useState(false);
   const [state, setState] = useState<PlayerState>();
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -42,8 +43,14 @@ export function useRemote(connection: SavedConnection | undefined) {
         if (!message) return;
         if (message.type === "STATE") setState(message.state);
         if (message.type === "PEER_STATUS") setPeerConnected(message.connected);
-        if (message.type === "SEARCH_RESULTS") setResults(message.results);
-        if (message.type === "ERROR") setError(message.message);
+        if (message.type === "SEARCH_RESULTS") {
+          setResults(message.results);
+          setSearching(false);
+        }
+        if (message.type === "ERROR") {
+          setError(message.message);
+          setSearching(false);
+        }
       });
       socket.addEventListener("close", () => {
         setStatus("disconnected");
@@ -70,7 +77,13 @@ export function useRemote(connection: SavedConnection | undefined) {
     socket.send(JSON.stringify({ type: "COMMAND", requestId: crypto.randomUUID(), command }));
   }, []);
 
-  return { status, peerConnected, state, results, error, setError, send };
+  const search = useCallback((query: string) => {
+    setResults([]);
+    setSearching(true);
+    send({ type: "SEARCH", query });
+  }, [send]);
+
+  return { status, peerConnected, state, results, searching, error, setError, send, search };
 }
 
 function sendOn(socket: WebSocket, command: Command): void {

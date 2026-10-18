@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { executeCommand, readPlayerState } from "./player";
+import { executeCommand, readPlayerState, readSearchResults } from "./player";
 
 describe("YouTube Music player adapter", () => {
   beforeEach(() => {
@@ -36,5 +36,23 @@ describe("YouTube Music player adapter", () => {
     const click = vi.spyOn(document.querySelector<HTMLButtonElement>(".next-button")!, "click");
     await executeCommand({ type: "NEXT" }, document);
     expect(click).toHaveBeenCalledOnce();
+  });
+
+  it("extracts unique song search results", () => {
+    document.body.innerHTML = `
+      <ytmusic-shelf-renderer>
+        <ytmusic-responsive-list-item-renderer>
+          <a href="https://music.youtube.com/watch?v=song-1">First Song</a>
+          <div class="secondary-flex-columns"><a>First Artist</a></div>
+          <img src="https://example.com/first.jpg">
+        </ytmusic-responsive-list-item-renderer>
+      </ytmusic-shelf-renderer>`;
+
+    expect(readSearchResults(document)).toEqual([{
+      id: "song-1",
+      title: "First Song",
+      artist: "First Artist",
+      thumbnail: "https://example.com/first.jpg",
+    }]);
   });
 });

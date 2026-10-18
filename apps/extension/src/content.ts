@@ -1,15 +1,19 @@
 import type { ClientMessage, Command } from "@yt-remote/protocol";
-import { executeCommand, readPlayerState } from "./player";
+import { executeCommand, readPlayerState, search } from "./player";
 
 type ContentRequest = { type: "EXECUTE"; requestId: string; command: Command };
 
 chrome.runtime.onMessage.addListener((message: ContentRequest, _sender, respond) => {
   if (message.type !== "EXECUTE") return;
 
-  void executeCommand(message.command, document)
-    .then(() => {
+  void (message.command.type === "SEARCH"
+    ? search(document, message.command.query)
+    : executeCommand(message.command, document))
+    .then((results) => {
       const response: ClientMessage =
-        message.command.type === "GET_STATE"
+        message.command.type === "SEARCH"
+          ? { type: "SEARCH_RESULTS", requestId: message.requestId, results: results ?? [] }
+          : message.command.type === "GET_STATE"
           ? { type: "STATE", state: readPlayerState(document) }
           : { type: "ACK", requestId: message.requestId };
       respond(response);
