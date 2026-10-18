@@ -1,0 +1,20 @@
+{
+  "name": "@yt-remote/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@yt-remote/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.31",
+    "happy-dom": "^20.0.10",
+    "vite": "^7.1.12",
+    "vitest": "^3.2.4"
+  }
+}

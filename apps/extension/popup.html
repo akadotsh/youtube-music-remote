@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YouTube Music Remote</title>
+    <style>
+      body { font: 14px system-ui; margin: 16px; min-width: 260px; color: #18181b; }
+      h1 { font-size: 16px; margin: 0 0 12px; }
+      #track { min-height: 38px; margin-bottom: 12px; }
+      #track strong, #track span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #track span { color: #71717a; font-size: 12px; }
+      .controls { display: flex; gap: 8px; }
+      button { flex: 1; padding: 8px; cursor: pointer; }
+      #status { color: #71717a; font-size: 12px; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>YouTube Music Remote</h1>
+    <div id="track">Open YouTube Music to begin.</div>
+    <div class="controls">
+      <button data-command="PREVIOUS" aria-label="Previous track">⏮</button>
+      <button data-command="PLAY" aria-label="Play">▶</button>
+      <button data-command="PAUSE" aria-label="Pause">⏸</button>
+      <button data-command="NEXT" aria-label="Next track">⏭</button>
+    </div>
+    <div id="status"></div>
+    <script type="module" src="/src/popup.ts"></script>
+  </body>
+</html>

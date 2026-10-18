@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Music Remote",
+  "version": "0.1.0",
+  "description": "Control an existing YouTube Music tab from a remote device.",
+  "permissions": ["tabs"],
+  "host_permissions": ["https://music.youtube.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
