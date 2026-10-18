@@ -13,6 +13,10 @@
       .controls { display: flex; gap: 8px; }
       button { flex: 1; padding: 8px; cursor: pointer; }
       #status { color: #71717a; font-size: 12px; margin-top: 10px; }
+      .pairing { border-top: 1px solid #e4e4e7; margin-top: 14px; padding-top: 12px; }
+      input { box-sizing: border-box; margin: 6px 0; padding: 7px; width: 100%; }
+      #pair { width: 100%; }
+      #code { font-size: 24px; font-weight: 700; letter-spacing: 4px; text-align: center; }
     </style>
   </head>
   <body>
@@ -25,6 +29,12 @@
       <button data-command="NEXT" aria-label="Next track">⏭</button>
     </div>
     <div id="status"></div>
+    <div class="pairing">
+      <label for="relay">Relay URL</label>
+      <input id="relay" type="url" placeholder="https://your-worker.workers.dev" />
+      <button id="pair">Create pairing code</button>
+      <div id="code"></div>
+    </div>
     <script type="module" src="/src/popup.ts"></script>
   </body>
 </html>

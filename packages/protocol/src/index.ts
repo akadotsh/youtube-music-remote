@@ -1,5 +1,16 @@
 export type Role = "remote" | "extension";
 
+export type DeviceCredential = {
+  roomId: string;
+  token: string;
+  role: Role;
+};
+
+export type PairingSession = DeviceCredential & {
+  pairingCode: string;
+  expiresAt: number;
+};
+
 export type Command =
   | { type: "PLAY" }
   | { type: "PAUSE" }
