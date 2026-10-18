@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
+  --color-muted: #27272a;
+  --color-muted-foreground: #a1a1aa;
+  --color-primary: #ef4444;
+  --color-primary-foreground: #ffffff;
+}
+
+html { background: var(--color-background); }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input { font: inherit; }

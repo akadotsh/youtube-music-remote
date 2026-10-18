@@ -94,6 +94,22 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
   }
 }
 
+export function parseServerMessage(raw: string): ServerMessage | undefined {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (
+      isRecord(value) &&
+      value.type === "PEER_STATUS" &&
+      typeof value.connected === "boolean"
+    ) {
+      return value as { type: "PEER_STATUS"; connected: boolean };
+    }
+    return isClientMessage(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isCommand(value: unknown): value is Command {
   if (!isRecord(value) || typeof value.type !== "string" || !commandTypes.has(value.type)) {
     return false;
