@@ -39,6 +39,17 @@ export default {
       return cors(await env.ROOMS.getByName(body.code).fetch(new Request("https://room/pair", { method: "POST" })));
     }
 
+    if (request.method === "POST" && url.pathname === "/revoke") {
+      const body = await safeJson(request);
+      if (!body || typeof body.roomId !== "string" || typeof body.token !== "string") {
+        return cors(json({ error: "Missing credential" }, 400));
+      }
+      return cors(await env.ROOMS.getByName(body.roomId).fetch(new Request("https://room/revoke", {
+        method: "POST",
+        body: JSON.stringify({ token: body.token }),
+      })));
+    }
+
     if (request.method === "GET" && url.pathname === "/connect") {
       const roomId = url.searchParams.get("room");
       if (!roomId || request.headers.get("Upgrade") !== "websocket") {
@@ -88,6 +99,15 @@ export class RelayRoom extends DurableObject<Env> {
       this.ctx.acceptWebSocket(server, [role]);
       this.broadcastStatus();
       return new Response(null, { status: 101, webSocket: client });
+    }
+
+    if (url.pathname === "/revoke" && request.method === "POST") {
+      const body = await safeJson(request);
+      const role = typeof body?.token === "string" ? await this.roleForToken(body.token) : undefined;
+      if (!role) return json({ error: "Unauthorized" }, 401);
+      await this.ctx.storage.delete(role === "extension" ? "extensionTokenHash" : "remoteTokenHash");
+      for (const socket of this.ctx.getWebSockets(role)) socket.close(1008, "Credential revoked");
+      return new Response(null, { status: 204 });
     }
 
     return new Response(null, { status: 404 });

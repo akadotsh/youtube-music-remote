@@ -9,7 +9,7 @@ const storageKey = "yt-remote-connection";
 export default function App() {
   const [connection, setConnection] = useState<SavedConnection | undefined>(() => loadConnection());
   if (!connection) return <Pairing onPaired={setConnection} />;
-  return <Remote connection={connection} onForget={() => forget(setConnection)} />;
+  return <Remote connection={connection} onForget={() => void forget(connection, setConnection)} />;
 }
 
 function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void }) {
@@ -133,10 +133,21 @@ function time(seconds: number): string {
 }
 
 function loadConnection(): SavedConnection | undefined {
-  try { return JSON.parse(localStorage.getItem(storageKey) ?? "") as SavedConnection; } catch { return undefined; }
+  try {
+    const value = JSON.parse(localStorage.getItem(storageKey) ?? "") as SavedConnection;
+    return value?.relayUrl && value.credential?.role === "remote" && value.credential.roomId && value.credential.token ? value : undefined;
+  } catch { return undefined; }
 }
 
-function forget(setConnection: (value: undefined) => void): void {
+async function forget(connection: SavedConnection, setConnection: (value: undefined) => void): Promise<void> {
+  try {
+    await fetch(`${connection.relayUrl}/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId: connection.credential.roomId, token: connection.credential.token }),
+    });
+  } finally {
   localStorage.removeItem(storageKey);
   setConnection(undefined);
+  }
 }

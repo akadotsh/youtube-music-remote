@@ -42,6 +42,8 @@ chrome.runtime.onMessage.addListener((message: ExtensionRequest, _sender, respon
 async function startPairing(relayUrl: string): Promise<PairingSession | { error: string }> {
   try {
     const normalizedUrl = relayUrl.replace(/\/$/, "");
+    const { connection: previous } = await chrome.storage.local.get("connection");
+    if (previous) await revoke(previous as StoredConnection);
     const response = await fetch(`${normalizedUrl}/pair/start`, { method: "POST" });
     if (!response.ok) throw new Error("Relay rejected the pairing request");
     const session = (await response.json()) as PairingSession;
@@ -50,6 +52,18 @@ async function startPairing(relayUrl: string): Promise<PairingSession | { error:
     return session;
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not start pairing" };
+  }
+}
+
+async function revoke(connection: StoredConnection): Promise<void> {
+  try {
+    await fetch(`${connection.relayUrl}/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId: connection.session.roomId, token: connection.session.token }),
+    });
+  } catch {
+    // A new room still makes the previous remote unable to control this extension.
   }
 }
 
