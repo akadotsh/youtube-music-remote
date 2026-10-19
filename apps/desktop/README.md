@@ -2,6 +2,14 @@
 
 This Rust controller reads and controls the current macOS Now Playing session. Playback remains in the original application.
 
+The GPUI desktop shell is intentionally minimal until the application design is ready. Run it with:
+
+```sh
+pnpm desktop:run
+```
+
+It opens as a normal Dock application and exits when its window is closed.
+
 It currently invokes [`media-control`](https://github.com/ungive/media-control), the BSD-licensed reference CLI that bundles [`mediaremote-adapter`](https://github.com/ungive/mediaremote-adapter).
 
 ## Setup

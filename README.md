@@ -17,7 +17,7 @@ The Rust controller in [`apps/desktop`](apps/desktop) uses MediaRemote to contro
 
 - Node.js 20 or newer
 - pnpm 10
-- Rust 1.85 or newer
+- Rust 1.92 or newer
 - `media-control` 0.7.7
 - A free Cloudflare account
 
