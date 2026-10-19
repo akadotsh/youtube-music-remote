@@ -3,7 +3,6 @@ import {
   type Command,
   type DeviceCredential,
   type PlayerState,
-  type SearchResult,
 } from "@yt-remote/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { websocketUrl } from "./connection";
@@ -15,8 +14,6 @@ export function useRemote(connection: SavedConnection | undefined) {
   const [status, setStatus] = useState<Status>("disconnected");
   const [peerConnected, setPeerConnected] = useState(false);
   const [state, setState] = useState<PlayerState>();
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -43,13 +40,8 @@ export function useRemote(connection: SavedConnection | undefined) {
         if (!message) return;
         if (message.type === "STATE") setState(message.state);
         if (message.type === "PEER_STATUS") setPeerConnected(message.connected);
-        if (message.type === "SEARCH_RESULTS") {
-          setResults(message.results);
-          setSearching(false);
-        }
         if (message.type === "ERROR") {
           setError(message.message);
-          setSearching(false);
         }
       });
       socket.addEventListener("close", () => {
@@ -77,13 +69,7 @@ export function useRemote(connection: SavedConnection | undefined) {
     socket.send(JSON.stringify({ type: "COMMAND", requestId: crypto.randomUUID(), command }));
   }, []);
 
-  const search = useCallback((query: string) => {
-    setResults([]);
-    setSearching(true);
-    send({ type: "SEARCH", query });
-  }, [send]);
-
-  return { status, peerConnected, state, results, searching, error, setError, send, search };
+  return { status, peerConnected, state, error, setError, send };
 }
 
 function sendOn(socket: WebSocket, command: Command): void {

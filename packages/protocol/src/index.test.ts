@@ -26,7 +26,7 @@ test("parses player capabilities", () => {
       position: 12,
       isPlaying: true,
       source: "YouTube Music",
-      capabilities: { playPause: true, next: true, previous: true, seek: true, search: false },
+      capabilities: { playPause: true, next: true, previous: true, seek: true },
     },
   };
   assert.deepEqual(parseClientMessage(JSON.stringify(message)), message);

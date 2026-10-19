@@ -71,12 +71,12 @@ export class RelayRoom extends DurableObject<Env> {
     const url = new URL(request.url);
 
     if (url.pathname === "/initialize" && request.method === "POST") {
-      if (await this.ctx.storage.get("extensionTokenHash")) return new Response(null, { status: 409 });
+      if (await this.ctx.storage.get("desktopTokenHash")) return new Response(null, { status: 409 });
       const token = randomToken();
       const expiresAt = Date.now() + PAIRING_TTL_MS;
-      await this.ctx.storage.put({ extensionTokenHash: await hash(token), expiresAt });
+      await this.ctx.storage.put({ desktopTokenHash: await hash(token), expiresAt });
       const roomId = this.ctx.id.name ?? "";
-      return json({ roomId, pairingCode: roomId, token, role: "extension", expiresAt } satisfies PairingSession);
+      return json({ roomId, pairingCode: roomId, token, role: "desktop", expiresAt } satisfies PairingSession);
     }
 
     if (url.pathname === "/pair" && request.method === "POST") {
@@ -105,7 +105,7 @@ export class RelayRoom extends DurableObject<Env> {
       const body = await safeJson(request);
       const role = typeof body?.token === "string" ? await this.roleForToken(body.token) : undefined;
       if (!role) return json({ error: "Unauthorized" }, 401);
-      await this.ctx.storage.delete(role === "extension" ? "extensionTokenHash" : "remoteTokenHash");
+      await this.ctx.storage.delete(role === "desktop" ? "desktopTokenHash" : "remoteTokenHash");
       for (const socket of this.ctx.getWebSockets(role)) socket.close(1008, "Credential revoked");
       return new Response(null, { status: 204 });
     }
@@ -119,7 +119,7 @@ export class RelayRoom extends DurableObject<Env> {
     const role = this.ctx.getTags(socket)[0] as Role | undefined;
     if (!message || !role || !canSend(role, message)) return socket.send(JSON.stringify({ type: "ERROR", message: "Invalid message" }));
 
-    const recipient = role === "remote" ? "extension" : "remote";
+    const recipient = role === "remote" ? "desktop" : "remote";
     for (const peer of this.ctx.getWebSockets(recipient)) peer.send(raw);
   }
 
@@ -134,19 +134,19 @@ export class RelayRoom extends DurableObject<Env> {
 
   private async roleForToken(token: string): Promise<Role | undefined> {
     const tokenHash = await hash(token);
-    if (tokenHash === (await this.ctx.storage.get("extensionTokenHash"))) return "extension";
+    if (tokenHash === (await this.ctx.storage.get("desktopTokenHash"))) return "desktop";
     if (tokenHash === (await this.ctx.storage.get("remoteTokenHash"))) return "remote";
   }
 
   private broadcastStatus(): void {
     queueMicrotask(() => {
-      const extensionConnected = this.ctx.getWebSockets("extension").length > 0;
+      const desktopConnected = this.ctx.getWebSockets("desktop").length > 0;
       const remoteConnected = this.ctx.getWebSockets("remote").length > 0;
-      for (const socket of this.ctx.getWebSockets("extension")) {
+      for (const socket of this.ctx.getWebSockets("desktop")) {
         socket.send(JSON.stringify({ type: "PEER_STATUS", connected: remoteConnected }));
       }
       for (const socket of this.ctx.getWebSockets("remote")) {
-        socket.send(JSON.stringify({ type: "PEER_STATUS", connected: extensionConnected }));
+        socket.send(JSON.stringify({ type: "PEER_STATUS", connected: desktopConnected }));
       }
     });
   }

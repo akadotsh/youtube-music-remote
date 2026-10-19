@@ -1,4 +1,4 @@
-export type Role = "remote" | "extension";
+export type Role = "remote" | "desktop";
 
 export type DeviceCredential = {
   roomId: string;
@@ -17,8 +17,6 @@ export type Command =
   | { type: "NEXT" }
   | { type: "PREVIOUS" }
   | { type: "SEEK"; position: number }
-  | { type: "SEARCH"; query: string }
-  | { type: "PLAY_RESULT"; resultId: string }
   | { type: "GET_STATE" };
 
 export type PlayerState = {
@@ -37,20 +35,11 @@ export type PlayerCapabilities = {
   next: boolean;
   previous: boolean;
   seek: boolean;
-  search: boolean;
-};
-
-export type SearchResult = {
-  id: string;
-  title: string;
-  artist: string;
-  thumbnail?: string;
 };
 
 export type ClientMessage =
   | { type: "COMMAND"; requestId: string; command: Command }
   | { type: "STATE"; state: PlayerState }
-  | { type: "SEARCH_RESULTS"; requestId: string; results: SearchResult[] }
   | { type: "ACK"; requestId: string }
   | { type: "ERROR"; requestId?: string; message: string };
 
@@ -64,8 +53,6 @@ const commandTypes = new Set([
   "NEXT",
   "PREVIOUS",
   "SEEK",
-  "SEARCH",
-  "PLAY_RESULT",
   "GET_STATE",
 ]);
 
@@ -77,12 +64,6 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return typeof value.requestId === "string" && isCommand(value.command);
     case "STATE":
       return isPlayerState(value.state);
-    case "SEARCH_RESULTS":
-      return (
-        typeof value.requestId === "string" &&
-        Array.isArray(value.results) &&
-        value.results.every(isSearchResult)
-      );
     case "ACK":
       return typeof value.requestId === "string";
     case "ERROR":
@@ -126,8 +107,6 @@ function isCommand(value: unknown): value is Command {
   }
 
   if (value.type === "SEEK") return isFiniteNonNegative(value.position);
-  if (value.type === "SEARCH") return typeof value.query === "string" && value.query.trim().length > 0;
-  if (value.type === "PLAY_RESULT") return typeof value.resultId === "string" && value.resultId.length > 0;
   return true;
 }
 
@@ -151,18 +130,7 @@ function isPlayerCapabilities(value: unknown): value is PlayerCapabilities {
     typeof value.playPause === "boolean" &&
     typeof value.next === "boolean" &&
     typeof value.previous === "boolean" &&
-    typeof value.seek === "boolean" &&
-    typeof value.search === "boolean"
-  );
-}
-
-function isSearchResult(value: unknown): value is SearchResult {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.title === "string" &&
-    typeof value.artist === "string" &&
-    (value.thumbnail === undefined || typeof value.thumbnail === "string")
+    typeof value.seek === "boolean"
   );
 }
 
