@@ -11,7 +11,7 @@ use gpui_kit::{
     open_window, prelude::*, px, size,
 };
 use std::{sync::Arc, time::Duration};
-use yt_remote_desktop::{MediaCommand, MediaController, MediaRemoteAdapter, MediaState};
+use yt_remote_desktop::{DesktopController, MediaCommand, MediaController, MediaState};
 
 struct Track {
     title: String,
@@ -46,7 +46,7 @@ impl From<MediaState> for Track {
 }
 
 struct Player {
-    controller: Option<Arc<MediaRemoteAdapter>>,
+    controller: Option<Arc<DesktopController>>,
     track: Option<Track>,
     progress: Entity<SliderState>,
     _progress_subscription: Subscription,
@@ -92,7 +92,7 @@ impl Player {
             },
         );
 
-        let (controller, error) = match MediaRemoteAdapter::new() {
+        let (controller, error) = match DesktopController::new() {
             Ok(controller) => (Some(Arc::new(controller)), None),
             Err(error) => (None, Some(error.to_string())),
         };

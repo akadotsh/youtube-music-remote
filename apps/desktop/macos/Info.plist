@@ -22,5 +22,7 @@
   <string>15.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Control the open YouTube Music tab in Google Chrome.</string>
 </dict>
 </plist>

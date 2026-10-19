@@ -4,12 +4,13 @@ An open-source remote for controlling the active media player on a Mac from an A
 
 ## Current desktop POC
 
-The Rust controller in [`apps/desktop`](apps/desktop) uses MediaRemote to control Chrome and compatible desktop players without browser automation. It provides a verified CLI and a functional GPUI player.
+The Rust controller in [`apps/desktop`](apps/desktop) targets an open YouTube Music tab in Chrome, with MediaRemote as a fallback for other players. It provides a verified CLI and a functional GPUI player.
 
 ## What works
 
 - Play, pause, previous, next, and seeking
 - Current title, artist, artwork, duration, and playback position
+- YouTube Music stays selected when another Chrome tab starts playing media
 - A native GPUI desktop player with live media updates
 - MediaRemote compatibility checks on macOS
 - A Cloudflare relay and installable Android PWA, not yet connected to the Rust desktop app

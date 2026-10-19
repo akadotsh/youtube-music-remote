@@ -1,6 +1,6 @@
 # Desktop controller
 
-This Rust controller reads and controls the current macOS Now Playing session. Playback remains in the original application.
+This Rust controller reads and controls an open YouTube Music tab in Chrome. When no such tab exists, it falls back to the current macOS Now Playing session. Playback remains in the original application.
 
 The GPUI desktop app shows the active song, artwork, playback progress and media controls. Run it during development with:
 
@@ -22,6 +22,8 @@ pnpm desktop:check
 
 CMake and Xcode Command Line Tools are build-time dependencies only. Build the self-contained application with `pnpm desktop:bundle`; the result is written to `target/bundle/macos/YouTube Music Remote.app`.
 
+In Chrome, enable **View > Developer > Allow JavaScript from Apple Events**. This lets the desktop app address the YouTube Music tab directly without bringing it to the foreground. Approve the macOS Automation prompt the first time the app connects to Chrome.
+
 ## Commands
 
 ```sh
@@ -38,7 +40,8 @@ cargo run --bin yt-remote-media -- seek 60
 ## Limitations
 
 - MediaRemote is a private Apple framework. macOS updates can break it without notice; rerun `check` after an OS update.
-- Commands target the active Now Playing session. There is no public macOS API for selecting a particular Chrome tab.
+- Direct tab control currently supports Google Chrome. Other browsers use the active macOS Now Playing session.
+- YouTube Music page markup can change; update the selectors in `youtube_music.rs` if controls stop resolving.
 - Seek, artwork and metadata availability depend on the player.
 - Local bundles use an ad-hoc signature. Public downloads would require Apple Developer signing and notarization to avoid Gatekeeper warnings.
 - Search and other YouTube Music-specific features are unavailable through MediaRemote.
