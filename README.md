@@ -13,7 +13,7 @@ The Rust controller in [`apps/desktop`](apps/desktop) targets an open YouTube Mu
 - YouTube Music stays selected when another Chrome tab starts playing media
 - A native GPUI desktop player with live media updates
 - MediaRemote compatibility checks on macOS
-- A Cloudflare relay and installable Android PWA, not yet connected to the Rust desktop app
+- A Cloudflare relay and installable Android PWA connected through desktop pairing
 
 ## Requirements
 
@@ -45,6 +45,8 @@ pnpm --filter @yt-remote/relay deploy
 
 Keep the resulting `https://…workers.dev` URL. The default configuration uses only free-tier Cloudflare services.
 
+Paste that URL into **Phone pairing** in the desktop app and create a six-digit code.
+
 For local relay development:
 
 ```sh
@@ -65,7 +67,7 @@ Deploy `apps/web/dist` to Cloudflare Pages or any HTTPS static host. For Cloudfl
 pnpm exec wrangler pages deploy apps/web/dist
 ```
 
-Open the deployed URL on Android, enter the same relay URL and pairing code, then use the browser's **Add to Home screen** action.
+Open the deployed URL on Android, enter the relay URL and desktop pairing code, then use the browser's **Add to Home screen** action.
 
 ## Architecture
 
@@ -78,7 +80,7 @@ The shared `@yt-remote/protocol` package validates messages at the relay boundar
 ## Workspace
 
 ```text
-apps/desktop    Rust media controller and future GPUI app
+apps/desktop    Rust media controller, GPUI app, and relay client
 apps/relay      Cloudflare Worker and Durable Objects
 apps/web        React, Tailwind CSS, shadcn-style PWA
 packages/protocol  Shared messages and validation

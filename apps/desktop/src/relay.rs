@@ -31,7 +31,7 @@ pub struct SavedConnection {
 }
 
 pub enum RelayEvent {
-    PairingCode { code: String, expires_at: u64 },
+    PairingCode(String),
     Status(RelayStatus),
     Error(String),
 }
@@ -43,7 +43,7 @@ pub enum RelayStatus {
     PhoneConnected,
 }
 
-pub fn pair(relay_url: &str) -> RelayResult<(SavedConnection, String, u64)> {
+pub fn pair(relay_url: &str) -> RelayResult<(SavedConnection, String)> {
     let relay_url = normalized_relay_url(relay_url)?;
     let mut url = Url::parse(&relay_url)?;
     url.set_path("/pair/start");
@@ -64,7 +64,7 @@ pub fn pair(relay_url: &str) -> RelayResult<(SavedConnection, String, u64)> {
         room_id: session.room_id,
         token: session.token,
     };
-    Ok((connection, session.pairing_code, session.expires_at))
+    Ok((connection, session.pairing_code))
 }
 
 pub fn run_relay(
@@ -285,7 +285,6 @@ struct PairingSession {
     pairing_code: String,
     token: String,
     role: String,
-    expires_at: u64,
 }
 
 #[derive(Deserialize)]

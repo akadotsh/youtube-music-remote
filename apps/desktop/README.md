@@ -10,6 +10,8 @@ pnpm desktop:run
 
 It opens as a normal Dock application and exits when its window is closed. The current interface is a functional baseline that can be restyled once the final design is ready.
 
+After deploying the Cloudflare relay, paste its URL into **Phone pairing** and create a code. The relay connection is saved in `~/Library/Application Support/YouTube Music Remote/connection.json` with owner-only permissions and restored on the next launch.
+
 The packaged application includes [`mediaremote-adapter`](https://github.com/ungive/mediaremote-adapter), so users do not need Homebrew or a separate media-control installation.
 
 ## Setup

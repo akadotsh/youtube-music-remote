@@ -2,6 +2,7 @@ use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
+    input::{Input, InputState},
     scroll::ScrollableElement as _,
     slider::{Slider, SliderEvent, SliderState, SliderValue},
 };
@@ -10,8 +11,19 @@ use gpui_kit::{
     Subscription, Task, Window, WindowBounds, WindowOptions, application, assets, div, img, init,
     open_window, prelude::*, px, size,
 };
-use std::{sync::Arc, time::Duration};
-use yt_remote_desktop::{DesktopController, MediaCommand, MediaController, MediaState};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    thread,
+    time::Duration,
+};
+use yt_remote_desktop::{
+    DesktopController, MediaCommand, MediaController, MediaState, RelayEvent, RelayStatus,
+    SavedConnection, load_connection, pair, run_relay, save_connection,
+};
 
 struct Track {
     title: String,
@@ -49,13 +61,21 @@ struct Player {
     controller: Option<Arc<DesktopController>>,
     track: Option<Track>,
     progress: Entity<SliderState>,
+    relay_url: Entity<InputState>,
     _progress_subscription: Subscription,
     _poll: Option<Task<()>>,
+    _relay_events: Task<()>,
+    relay_events: mpsc::Sender<RelayEvent>,
+    relay_cancel: Option<Arc<AtomicBool>>,
     loading: bool,
     seeking: bool,
     preview_position: Option<f64>,
     command_pending: bool,
     error: Option<String>,
+    pairing: bool,
+    pairing_code: Option<String>,
+    relay_status: String,
+    relay_error: Option<String>,
 }
 
 impl Player {
@@ -96,6 +116,40 @@ impl Player {
             Ok(controller) => (Some(Arc::new(controller)), None),
             Err(error) => (None, Some(error.to_string())),
         };
+        let saved_connection = load_connection();
+        let relay_url = cx.new(|cx| {
+            InputState::new(window, cx).default_value(
+                saved_connection
+                    .as_ref()
+                    .map(|connection| connection.relay_url.as_str())
+                    .unwrap_or(""),
+            )
+        });
+        let (relay_events, receiver) = mpsc::channel();
+        let relay_event_task = cx.spawn(async move |this, cx| {
+            loop {
+                while let Ok(event) = receiver.try_recv() {
+                    if this
+                        .update(cx, |this, cx| {
+                            this.apply_relay_event(event);
+                            cx.notify();
+                        })
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(100))
+                    .await;
+            }
+        });
+        let relay_cancel = saved_connection.and_then(|connection| {
+            controller.as_ref().map(|controller| {
+                start_relay(connection, controller.clone(), relay_events.clone(), None)
+            })
+        });
+        let relay_configured = relay_cancel.is_some();
         let window_handle = window.window_handle();
         let poll = controller.as_ref().map(|controller| {
             let controller = controller.clone();
@@ -128,13 +182,92 @@ impl Player {
             controller,
             track: None,
             progress,
+            relay_url,
             _progress_subscription: progress_subscription,
             _poll: poll,
+            _relay_events: relay_event_task,
+            relay_events,
+            relay_cancel,
             loading: error.is_none(),
             seeking: false,
             preview_position: None,
             command_pending: false,
             error,
+            pairing: false,
+            pairing_code: None,
+            relay_status: if relay_configured {
+                "Connecting to relay…".into()
+            } else {
+                "Not paired".into()
+            },
+            relay_error: None,
+        }
+    }
+
+    fn pair_phone(&mut self, cx: &mut Context<Self>) {
+        let Some(controller) = self.controller.clone() else {
+            return;
+        };
+        let relay_url = self.relay_url.read(cx).value().trim().to_owned();
+        if relay_url.is_empty() {
+            self.relay_error = Some("Enter your deployed relay URL".into());
+            cx.notify();
+            return;
+        }
+        let previous = self.relay_cancel.take();
+        if let Some(previous) = previous {
+            previous.store(true, Ordering::Relaxed);
+        }
+        let cancelled = Arc::new(AtomicBool::new(false));
+        self.relay_cancel = Some(cancelled.clone());
+        self.pairing = true;
+        self.pairing_code = None;
+        self.relay_status = "Creating pairing code…".into();
+        self.relay_error = None;
+        cx.notify();
+
+        let events = self.relay_events.clone();
+        thread::spawn(move || match pair(&relay_url) {
+            Ok((connection, code)) => {
+                if let Err(error) = save_connection(&connection) {
+                    let _ = events.send(RelayEvent::Error(error.to_string()));
+                    return;
+                }
+                let _ = events.send(RelayEvent::PairingCode(code));
+                run_relay(connection, controller, cancelled, events);
+            }
+            Err(error) => {
+                let _ = events.send(RelayEvent::Error(error.to_string()));
+            }
+        });
+    }
+
+    fn apply_relay_event(&mut self, event: RelayEvent) {
+        match event {
+            RelayEvent::PairingCode(code) => {
+                self.pairing = false;
+                self.pairing_code = Some(code);
+                self.relay_status = "Enter this code on your phone within five minutes".into();
+                self.relay_error = None;
+            }
+            RelayEvent::Status(status) => {
+                self.pairing = false;
+                if matches!(status, RelayStatus::PhoneConnected) {
+                    self.pairing_code = None;
+                }
+                self.relay_status = match status {
+                    RelayStatus::Connecting => "Connecting to relay…",
+                    RelayStatus::WaitingForPhone => "Waiting for phone",
+                    RelayStatus::PhoneConnected => "Phone connected",
+                }
+                .into();
+                self.relay_error = None;
+            }
+            RelayEvent::Error(error) => {
+                self.pairing = false;
+                self.relay_status = "Relay unavailable".into();
+                self.relay_error = Some(error);
+            }
         }
     }
 
@@ -327,6 +460,72 @@ impl Player {
             })
             .into_any_element()
     }
+
+    fn render_pairing(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .w_full()
+            .max_w(px(520.))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .rounded_xl()
+            .bg(cx.theme().tokens.muted)
+            .child(div().text_base().font_semibold().child("Phone pairing"))
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Deploy the relay, paste its URL here, then create a code for the phone PWA."),
+            )
+            .child(Input::new(&self.relay_url).id("relay-url").w_full())
+            .child(
+                Button::new("pair-phone")
+                    .primary()
+                    .label(if self.pairing {
+                        "Creating code…"
+                    } else {
+                        "Create pairing code"
+                    })
+                    .accessibility_label("Create phone pairing code")
+                    .disabled(self.pairing || self.controller.is_none())
+                    .on_click(cx.listener(|this, _, _, cx| this.pair_phone(cx))),
+            )
+            .when_some(self.pairing_code.clone(), |this, code| {
+                this.child(
+                    div()
+                        .text_2xl()
+                        .font_semibold()
+                        .text_center()
+                        .child(code),
+                )
+            })
+            .child(
+                div()
+                    .text_sm()
+                    .text_center()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(self.relay_status.clone()),
+            )
+            .when_some(self.relay_error.clone(), |this, error| {
+                this.child(
+                    div()
+                        .text_sm()
+                        .text_center()
+                        .text_color(cx.theme().danger)
+                        .child(error),
+                )
+            })
+            .into_any_element()
+    }
+}
+
+impl Drop for Player {
+    fn drop(&mut self) {
+        if let Some(cancelled) = &self.relay_cancel {
+            cancelled.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 impl Render for Player {
@@ -335,7 +534,9 @@ impl Render for Player {
             .size_full()
             .overflow_y_scrollbar()
             .flex()
-            .justify_center()
+            .flex_col()
+            .items_center()
+            .gap_8()
             .bg(cx.theme().tokens.background)
             .text_color(cx.theme().foreground)
             .p_8()
@@ -366,7 +567,23 @@ impl Render for Player {
                     })
                     .into_any_element()
             })
+            .child(self.render_pairing(cx))
     }
+}
+
+fn start_relay(
+    connection: SavedConnection,
+    controller: Arc<DesktopController>,
+    events: mpsc::Sender<RelayEvent>,
+    previous: Option<Arc<AtomicBool>>,
+) -> Arc<AtomicBool> {
+    if let Some(previous) = previous {
+        previous.store(true, Ordering::Relaxed);
+    }
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let worker_cancelled = cancelled.clone();
+    thread::spawn(move || run_relay(connection, controller, worker_cancelled, events));
+    cancelled
 }
 
 fn slider_percentage(value: SliderValue) -> f64 {
