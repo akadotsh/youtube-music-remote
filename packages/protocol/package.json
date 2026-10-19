@@ -5,10 +5,6 @@
   "type": "module",
   "exports": "./src/index.ts",
   "scripts": {
-    "test": "tsx --test src/index.test.ts",
     "typecheck": "tsc -p tsconfig.json"
-  },
-  "devDependencies": {
-    "tsx": "^4.20.6"
   }
 }

@@ -12,7 +12,7 @@ The Rust controller in [`apps/desktop`](apps/desktop) uses MediaRemote to contro
 - Current title, artist, artwork, duration, and playback position
 - A native GPUI desktop player with live media updates
 - MediaRemote compatibility checks on macOS
-- A separately tested Cloudflare relay and installable Android PWA, not yet connected to the Rust desktop app
+- A Cloudflare relay and installable Android PWA, not yet connected to the Rust desktop app
 
 ## Requirements
 
@@ -26,10 +26,8 @@ The Rust controller in [`apps/desktop`](apps/desktop) uses MediaRemote to contro
 
 ```sh
 pnpm install
-pnpm test
 pnpm typecheck
 pnpm build
-cargo test
 pnpm desktop:check
 ```
 

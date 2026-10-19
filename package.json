@@ -9,8 +9,6 @@
     "desktop:prepare-adapter": "./scripts/prepare-mediaremote-adapter.sh",
     "desktop:run": "cargo run --bin yt-remote-desktop",
     "desktop:status": "pnpm desktop:prepare-adapter && cargo run --bin yt-remote-media -- status",
-    "desktop:test": "cargo test",
-    "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {

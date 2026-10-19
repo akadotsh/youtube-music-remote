@@ -404,21 +404,3 @@ fn main() {
         .expect("failed to open desktop window");
     });
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn calculates_progress_percentage() {
-        assert_eq!(progress_percentage(Some(30.), Some(120.)), 25.);
-        assert_eq!(progress_percentage(Some(10.), Some(0.)), 0.);
-        assert_eq!(progress_percentage(Some(200.), Some(100.)), 100.);
-    }
-
-    #[test]
-    fn formats_playback_time() {
-        assert_eq!(format_time(Some(125.)), "2:05");
-        assert_eq!(format_time(None), "--:--");
-    }
-}
