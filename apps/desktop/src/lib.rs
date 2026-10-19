@@ -1,3 +1,3 @@
 mod media;
 
-pub use media::{MediaCommand, MediaControlAdapter, MediaController, MediaError, MediaState};
+pub use media::{MediaCommand, MediaController, MediaError, MediaRemoteAdapter, MediaState};

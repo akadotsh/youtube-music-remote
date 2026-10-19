@@ -10,15 +10,17 @@ pnpm desktop:run
 
 It opens as a normal Dock application and exits when its window is closed.
 
-It currently invokes [`media-control`](https://github.com/ungive/media-control), the BSD-licensed reference CLI that bundles [`mediaremote-adapter`](https://github.com/ungive/mediaremote-adapter).
+The packaged application includes [`mediaremote-adapter`](https://github.com/ungive/mediaremote-adapter), so users do not need Homebrew or a separate media-control installation.
 
 ## Setup
 
 ```sh
-brew tap ungive/media-control
-brew install media-control
-cargo run --bin yt-remote-media -- check
+brew install cmake
+pnpm desktop:prepare-adapter
+pnpm desktop:check
 ```
+
+CMake and Xcode Command Line Tools are build-time dependencies only. Build the self-contained application with `pnpm desktop:bundle`; the result is written to `target/bundle/macos/YouTube Music Remote.app`.
 
 ## Commands
 
@@ -38,5 +40,5 @@ cargo run --bin yt-remote-media -- seek 60
 - MediaRemote is a private Apple framework. macOS updates can break it without notice; rerun `check` after an OS update.
 - Commands target the active Now Playing session. There is no public macOS API for selecting a particular Chrome tab.
 - Seek, artwork and metadata availability depend on the player.
-- The POC depends on Homebrew's `media-control`. A packaged application should bundle and sign the adapter.
+- Local bundles use an ad-hoc signature. Public downloads would require Apple Developer signing and notarization to avoid Gatekeeper warnings.
 - Search and other YouTube Music-specific features are unavailable through MediaRemote.

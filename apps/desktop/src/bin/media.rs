@@ -1,5 +1,5 @@
 use std::{env, fs, process};
-use yt_remote_desktop::{MediaCommand, MediaControlAdapter, MediaController, MediaState};
+use yt_remote_desktop::{MediaCommand, MediaController, MediaRemoteAdapter, MediaState};
 
 fn main() {
     if let Err(error) = run() {
@@ -9,7 +9,7 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let controller = MediaControlAdapter::new();
+    let controller = MediaRemoteAdapter::new()?;
     let arguments: Vec<_> = env::args().skip(1).collect();
     match arguments.first().map(String::as_str) {
         Some("check") => {

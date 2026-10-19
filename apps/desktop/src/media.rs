@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Deserialize;
-use std::{error::Error, fmt, process::Command};
+use std::{env, error::Error, fmt, path::PathBuf, process::Command};
 
 #[derive(Debug, PartialEq)]
 pub struct MediaState {
@@ -30,31 +30,66 @@ pub trait MediaController {
     fn send(&self, command: MediaCommand) -> Result<(), MediaError>;
 }
 
-pub struct MediaControlAdapter {
-    executable: String,
+pub struct MediaRemoteAdapter {
+    script: PathBuf,
+    framework: PathBuf,
+    test_client: PathBuf,
 }
 
-impl MediaControlAdapter {
-    pub fn new() -> Self {
-        Self::with_executable("media-control")
+impl MediaRemoteAdapter {
+    pub fn new() -> Result<Self, MediaError> {
+        if let Some(directory) = env::var_os("YT_REMOTE_MEDIAREMOTE_ADAPTER_DIR") {
+            return Self::from_resource_directory(directory.into());
+        }
+
+        let executable = env::current_exe().map_err(MediaError::CurrentExecutable)?;
+        let executable_directory = executable
+            .parent()
+            .ok_or(MediaError::ResourcesUnavailable)?;
+        let candidates = [
+            executable_directory
+                .parent()
+                .map(|contents| contents.join("Resources/mediaremote-adapter")),
+            executable_directory
+                .parent()
+                .map(|target| target.join("mediaremote-adapter")),
+        ];
+
+        candidates
+            .into_iter()
+            .flatten()
+            .find(|directory| directory.is_dir())
+            .ok_or(MediaError::ResourcesUnavailable)
+            .and_then(Self::from_resource_directory)
     }
 
-    pub fn with_executable(executable: impl Into<String>) -> Self {
-        Self {
-            executable: executable.into(),
+    pub fn from_resource_directory(directory: PathBuf) -> Result<Self, MediaError> {
+        let adapter = Self {
+            script: directory.join("mediaremote-adapter.pl"),
+            framework: directory.join("MediaRemoteAdapter.framework"),
+            test_client: directory.join("MediaRemoteAdapterTestClient"),
+        };
+        for path in [&adapter.script, &adapter.framework, &adapter.test_client] {
+            if !path.exists() {
+                return Err(MediaError::MissingResource(path.clone()));
+            }
         }
+        Ok(adapter)
     }
 
     fn run(&self, arguments: &[String]) -> Result<String, MediaError> {
-        let output = Command::new(&self.executable)
+        let output = Command::new("/usr/bin/perl")
+            .arg(&self.script)
+            .arg(&self.framework)
+            .arg(&self.test_client)
             .args(arguments)
             .output()
-            .map_err(|_| MediaError::Unavailable)?;
+            .map_err(MediaError::LaunchFailed)?;
 
         if !output.status.success() {
             let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
             return Err(MediaError::CommandFailed(if message.is_empty() {
-                format!("media-control exited with {}", output.status)
+                format!("mediaremote-adapter exited with {}", output.status)
             } else {
                 message
             }));
@@ -65,25 +100,26 @@ impl MediaControlAdapter {
 
     fn arguments(command: &MediaCommand) -> Result<Vec<String>, MediaError> {
         match command {
-            MediaCommand::Play => Ok(vec!["play".into()]),
-            MediaCommand::Pause => Ok(vec!["pause".into()]),
-            MediaCommand::Next => Ok(vec!["next-track".into()]),
-            MediaCommand::Previous => Ok(vec!["previous-track".into()]),
-            MediaCommand::Seek(seconds) if seconds.is_finite() && *seconds >= 0.0 => {
-                Ok(vec!["seek".into(), seconds.to_string()])
+            MediaCommand::Play => Ok(vec!["send".into(), "0".into()]),
+            MediaCommand::Pause => Ok(vec!["send".into(), "1".into()]),
+            MediaCommand::Next => Ok(vec!["send".into(), "4".into()]),
+            MediaCommand::Previous => Ok(vec!["send".into(), "5".into()]),
+            MediaCommand::Seek(seconds)
+                if seconds.is_finite()
+                    && *seconds >= 0.0
+                    && *seconds <= u64::MAX as f64 / 1_000_000.0 =>
+            {
+                Ok(vec![
+                    "seek".into(),
+                    (seconds * 1_000_000.0).round().to_string(),
+                ])
             }
             MediaCommand::Seek(_) => Err(MediaError::InvalidSeek),
         }
     }
 }
 
-impl Default for MediaControlAdapter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MediaController for MediaControlAdapter {
+impl MediaController for MediaRemoteAdapter {
     fn check_compatibility(&self) -> Result<(), MediaError> {
         self.run(&["test".into()]).map(drop)
     }
@@ -119,7 +155,10 @@ impl MediaController for MediaControlAdapter {
 
 #[derive(Debug)]
 pub enum MediaError {
-    Unavailable,
+    ResourcesUnavailable,
+    MissingResource(PathBuf),
+    CurrentExecutable(std::io::Error),
+    LaunchFailed(std::io::Error),
     CommandFailed(String),
     InvalidResponse(serde_json::Error),
     InvalidSeek,
@@ -128,13 +167,29 @@ pub enum MediaError {
 impl fmt::Display for MediaError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unavailable => write!(
+            Self::ResourcesUnavailable => write!(
                 formatter,
-                "install media-control with: brew tap ungive/media-control && brew install media-control"
+                "bundled media adapter not found; run `pnpm desktop:prepare-adapter` when developing"
             ),
+            Self::MissingResource(path) => {
+                write!(
+                    formatter,
+                    "media adapter resource is missing: {}",
+                    path.display()
+                )
+            }
+            Self::CurrentExecutable(error) => {
+                write!(
+                    formatter,
+                    "could not locate the current executable: {error}"
+                )
+            }
+            Self::LaunchFailed(error) => {
+                write!(formatter, "could not launch media adapter: {error}")
+            }
             Self::CommandFailed(message) => formatter.write_str(message),
             Self::InvalidResponse(error) => {
-                write!(formatter, "invalid media-control response: {error}")
+                write!(formatter, "invalid media adapter response: {error}")
             }
             Self::InvalidSeek => {
                 formatter.write_str("seek expects a non-negative number of seconds")
@@ -174,31 +229,31 @@ mod tests {
     #[test]
     fn maps_playback_commands() {
         assert_eq!(
-            MediaControlAdapter::arguments(&MediaCommand::Play).unwrap(),
-            ["play"]
+            MediaRemoteAdapter::arguments(&MediaCommand::Play).unwrap(),
+            ["send", "0"]
         );
         assert_eq!(
-            MediaControlAdapter::arguments(&MediaCommand::Pause).unwrap(),
-            ["pause"]
+            MediaRemoteAdapter::arguments(&MediaCommand::Pause).unwrap(),
+            ["send", "1"]
         );
         assert_eq!(
-            MediaControlAdapter::arguments(&MediaCommand::Next).unwrap(),
-            ["next-track"]
+            MediaRemoteAdapter::arguments(&MediaCommand::Next).unwrap(),
+            ["send", "4"]
         );
         assert_eq!(
-            MediaControlAdapter::arguments(&MediaCommand::Previous).unwrap(),
-            ["previous-track"]
+            MediaRemoteAdapter::arguments(&MediaCommand::Previous).unwrap(),
+            ["send", "5"]
         );
         assert_eq!(
-            MediaControlAdapter::arguments(&MediaCommand::Seek(42.5)).unwrap(),
-            ["seek", "42.5"]
+            MediaRemoteAdapter::arguments(&MediaCommand::Seek(42.5)).unwrap(),
+            ["seek", "42500000"]
         );
     }
 
     #[test]
     fn rejects_invalid_seek() {
         assert!(matches!(
-            MediaControlAdapter::arguments(&MediaCommand::Seek(-1.0)),
+            MediaRemoteAdapter::arguments(&MediaCommand::Seek(-1.0)),
             Err(MediaError::InvalidSeek)
         ));
     }

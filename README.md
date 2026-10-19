@@ -4,7 +4,7 @@ An open-source remote for controlling the active media player on a Mac from an A
 
 ## Current desktop POC
 
-The Rust controller in [`apps/desktop`](apps/desktop) uses MediaRemote to control Chrome and compatible desktop players without browser automation. It currently provides a verified CLI; a GPUI desktop shell is the next milestone.
+The Rust controller in [`apps/desktop`](apps/desktop) uses MediaRemote to control Chrome and compatible desktop players without browser automation. It provides a verified CLI and a minimal GPUI desktop shell.
 
 ## What works
 
@@ -18,7 +18,7 @@ The Rust controller in [`apps/desktop`](apps/desktop) uses MediaRemote to contro
 - Node.js 20 or newer
 - pnpm 10
 - Rust 1.92 or newer
-- `media-control` 0.7.7
+- CMake and Xcode Command Line Tools (source builds only)
 - A free Cloudflare account
 
 ## Install and verify
@@ -29,8 +29,10 @@ pnpm test
 pnpm typecheck
 pnpm build
 cargo test
-cargo run --bin yt-remote-media -- check
+pnpm desktop:check
 ```
+
+Create a self-contained, ad-hoc signed macOS application with `pnpm desktop:bundle`. End users of the bundle do not need Homebrew, CMake, Rust, or `media-control`.
 
 ## Deploy the relay
 
