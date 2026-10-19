@@ -2,6 +2,10 @@
 
 An open-source Android PWA that controls YouTube Music playing in an existing Chrome tab on a Mac. Commands and metadata travel through a Cloudflare Durable Object; audio and Google credentials never leave the Mac.
 
+## Current native POC
+
+The local macOS controller is in [`apps/macos-controller`](apps/macos-controller). It uses MediaRemote to control the active player—including Chrome and compatible desktop players—without the extension or remote infrastructure. See its README for setup, commands, verification steps and private-API limitations.
+
 ## What works
 
 - Secure, six-digit device pairing with five-minute expiry and rate limiting
