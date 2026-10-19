@@ -15,7 +15,7 @@ pub struct MediaState {
     pub artwork_mime_type: Option<String>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MediaCommand {
     Play,
     Pause,
