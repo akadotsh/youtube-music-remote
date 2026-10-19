@@ -4,7 +4,7 @@ An open-source Android PWA that controls YouTube Music playing in an existing Ch
 
 ## Current native POC
 
-The local macOS controller is in [`apps/macos-controller`](apps/macos-controller). It uses MediaRemote to control the active player—including Chrome and compatible desktop players—without the extension or remote infrastructure. See its README for setup, commands, verification steps and private-API limitations.
+The local Rust controller is in [`apps/desktop`](apps/desktop). It uses MediaRemote to control the active player—including Chrome and compatible desktop players—without the remote infrastructure. See its README for setup, commands and private-API limitations.
 
 ## What works
 

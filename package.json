@@ -4,9 +4,9 @@
   "packageManager": "pnpm@10.7.0",
   "scripts": {
     "build": "pnpm -r build",
-    "mac:check": "cd apps/macos-controller && swift run yt-remote-macos check",
-    "mac:status": "cd apps/macos-controller && swift run yt-remote-macos status",
-    "mac:test": "cd apps/macos-controller && swift test",
+    "desktop:check": "cargo run --bin yt-remote-media -- check",
+    "desktop:status": "cargo run --bin yt-remote-media -- status",
+    "desktop:test": "cargo test",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },
