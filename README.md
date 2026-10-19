@@ -64,7 +64,7 @@ pnpm --filter @yt-remote/web build
 Deploy `apps/web/dist` to Cloudflare Pages or any HTTPS static host. For Cloudflare Pages with Wrangler:
 
 ```sh
-pnpm exec wrangler pages deploy apps/web/dist
+pnpm --filter @yt-remote/relay exec wrangler pages deploy ../../apps/web/dist
 ```
 
 Open the deployed URL on Android, enter the relay URL and desktop pairing code, then use the browser's **Add to Home screen** action.
