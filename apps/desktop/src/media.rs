@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Deserialize;
-use std::{env, error::Error, fmt, path::PathBuf, process::Command};
+use std::{env, error::Error, fmt, path::PathBuf, process::Command, sync::Mutex};
 
 #[derive(Debug, PartialEq)]
 pub struct MediaState {
@@ -49,6 +49,15 @@ pub struct MediaRemoteAdapter {
     script: PathBuf,
     framework: PathBuf,
     test_client: PathBuf,
+    artwork: Mutex<Option<CachedArtwork>>,
+}
+
+#[derive(Clone)]
+struct CachedArtwork {
+    title: String,
+    artist: Option<String>,
+    bytes: Vec<u8>,
+    mime_type: Option<String>,
 }
 
 impl MediaRemoteAdapter {
@@ -83,6 +92,7 @@ impl MediaRemoteAdapter {
             script: directory.join("mediaremote-adapter.pl"),
             framework: directory.join("MediaRemoteAdapter.framework"),
             test_client: directory.join("MediaRemoteAdapterTestClient"),
+            artwork: Mutex::new(None),
         };
         for path in [&adapter.script, &adapter.framework, &adapter.test_client] {
             if !path.exists() {
@@ -155,6 +165,29 @@ impl MediaController for MediaRemoteAdapter {
         }
 
         let payload: AdapterPayload = serde_json::from_str(&output)?;
+        if is_video_media_type(payload.media_type.as_deref()) {
+            return Ok(None);
+        }
+        let artwork = payload
+            .artwork_data
+            .and_then(|value| STANDARD.decode(value).ok());
+        let artwork_mime_type = payload.artwork_mime_type.or_else(|| {
+            artwork
+                .as_deref()
+                .and_then(artwork_mime_type)
+                .map(str::to_owned)
+        });
+        let mut artwork_cache = self
+            .artwork
+            .lock()
+            .map_err(|_| MediaError::CommandFailed("artwork cache unavailable".into()))?;
+        let (artwork, artwork_mime_type) = preserve_artwork(
+            &mut artwork_cache,
+            &payload.title,
+            payload.artist.as_deref(),
+            artwork,
+            artwork_mime_type,
+        );
         Ok(Some(MediaState {
             title: payload.title,
             artist: payload.artist,
@@ -166,16 +199,58 @@ impl MediaController for MediaRemoteAdapter {
             duration: payload.duration,
             position: payload.elapsed_time_now.or(payload.elapsed_time),
             volume: None,
-            artwork: payload
-                .artwork_data
-                .and_then(|value| STANDARD.decode(value).ok()),
-            artwork_mime_type: payload.artwork_mime_type,
+            artwork,
+            artwork_mime_type,
             artwork_url: None,
         }))
     }
 
     fn send(&self, command: MediaCommand) -> Result<(), MediaError> {
         self.run(&Self::arguments(&command)?).map(drop)
+    }
+}
+
+fn artwork_mime_type(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\xFF\xD8\xFF") {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"\x89PNG\r\n\x1A\n") {
+        Some("image/png")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+        Some("image/webp")
+    } else {
+        None
+    }
+}
+
+fn is_video_media_type(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value.to_ascii_lowercase().contains("video"))
+}
+
+fn preserve_artwork(
+    cache: &mut Option<CachedArtwork>,
+    title: &str,
+    artist: Option<&str>,
+    artwork: Option<Vec<u8>>,
+    mime_type: Option<String>,
+) -> (Option<Vec<u8>>, Option<String>) {
+    if let Some(bytes) = artwork {
+        *cache = Some(CachedArtwork {
+            title: title.into(),
+            artist: artist.map(str::to_owned),
+            bytes: bytes.clone(),
+            mime_type: mime_type.clone(),
+        });
+        (Some(bytes), mime_type)
+    } else if let Some(cached) = cache
+        .as_ref()
+        .filter(|cached| cached.title == title && cached.artist.as_deref() == artist)
+    {
+        (Some(cached.bytes.clone()), cached.mime_type.clone())
+    } else {
+        *cache = None;
+        (None, None)
     }
 }
 
@@ -246,4 +321,58 @@ struct AdapterPayload {
     elapsed_time_now: Option<f64>,
     artwork_data: Option<String>,
     artwork_mime_type: Option<String>,
+    media_type: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identifies_common_artwork_without_mediaremote_metadata() {
+        assert_eq!(artwork_mime_type(b"\xFF\xD8\xFFrest"), Some("image/jpeg"));
+        assert_eq!(
+            artwork_mime_type(b"\x89PNG\r\n\x1A\nrest"),
+            Some("image/png")
+        );
+        assert_eq!(artwork_mime_type(b"GIF89arest"), Some("image/gif"));
+        assert_eq!(artwork_mime_type(b"RIFF1234WEBPrest"), Some("image/webp"));
+        assert_eq!(artwork_mime_type(b"unknown"), None);
+    }
+
+    #[test]
+    fn preserves_artwork_only_while_the_track_is_unchanged() {
+        let mut cache = None;
+        let expected = vec![1, 2, 3];
+        assert_eq!(
+            preserve_artwork(
+                &mut cache,
+                "Song",
+                Some("Artist"),
+                Some(expected.clone()),
+                Some("image/jpeg".into())
+            ),
+            (Some(expected.clone()), Some("image/jpeg".into()))
+        );
+        assert_eq!(
+            preserve_artwork(&mut cache, "Song", Some("Artist"), None, None),
+            (Some(expected), Some("image/jpeg".into()))
+        );
+        assert_eq!(
+            preserve_artwork(&mut cache, "Song", Some("Another artist"), None, None),
+            (None, None)
+        );
+    }
+
+    #[test]
+    fn distinguishes_video_from_music_media_types() {
+        assert!(is_video_media_type(Some(
+            "kMRMediaRemoteNowPlayingInfoTypeVideo"
+        )));
+        assert!(!is_video_media_type(Some("MRMediaRemoteMediaTypeMusic")));
+        assert!(!is_video_media_type(Some(
+            "kMRMediaRemoteNowPlayingInfoTypeAudio"
+        )));
+        assert!(!is_video_media_type(None));
+    }
 }

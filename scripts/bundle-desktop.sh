@@ -16,6 +16,8 @@ install -m 755 "${REPOSITORY_ROOT}/target/release/yt-remote-desktop" \
   "${CONTENTS_DIR}/MacOS/youtube-music-remote"
 install -m 644 "${REPOSITORY_ROOT}/apps/desktop/macos/Info.plist" \
   "${CONTENTS_DIR}/Info.plist"
+install -m 644 "${REPOSITORY_ROOT}/apps/desktop/macos/MusicRemote.icns" \
+  "${CONTENTS_DIR}/Resources/MusicRemote.icns"
 ditto "${REPOSITORY_ROOT}/target/mediaremote-adapter" \
   "${CONTENTS_DIR}/Resources/mediaremote-adapter"
 

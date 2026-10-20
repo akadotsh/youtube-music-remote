@@ -659,7 +659,7 @@ impl Render for Player {
                     .child(if self.loading {
                         "Looking for currently playing media…".to_string()
                     } else {
-                        "Open YouTube Music in Chrome to get started".to_string()
+                        "Start playing music in any browser to get started".to_string()
                     })
                     .when_some(self.error.clone(), |this, error| {
                         this.child(

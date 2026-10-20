@@ -8,6 +8,8 @@
   <string>youtube-music-remote</string>
   <key>CFBundleIdentifier</key>
   <string>dev.akashprasad.youtube-music-remote</string>
+  <key>CFBundleIconFile</key>
+  <string>MusicRemote.icns</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -23,6 +25,6 @@
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSAppleEventsUsageDescription</key>
-  <string>Control the open YouTube Music tab in Google Chrome.</string>
+  <string>Control music playing on this Mac from your phone.</string>
 </dict>
 </plist>

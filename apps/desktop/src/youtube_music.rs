@@ -80,25 +80,36 @@ impl DesktopController {
         let Some(raw) = run_in_youtube_music(READ_STATE)? else {
             return Ok(None);
         };
-        let state: BrowserState = serde_json::from_str(&raw)?;
-        let state = MediaState {
-            title: state.title,
-            artist: non_empty(state.artist),
-            album: None,
-            source: "YouTube Music".into(),
-            is_playing: state.is_playing,
-            duration: valid_time(state.duration),
-            position: valid_time(state.position),
-            volume: state
-                .volume
-                .filter(|value| value.is_finite() && (0. ..=1.).contains(value)),
-            artwork: None,
-            artwork_url: state.artwork.and_then(|value| artwork_url(&value)),
-            artwork_mime_type: None,
-        };
-
-        Ok(Some(state))
+        browser_state(&raw)
     }
+
+    fn safari_youtube_music_state(&self) -> Result<Option<MediaState>, MediaError> {
+        let Some(raw) = run_in_safari_youtube_music(READ_STATE)? else {
+            return Ok(None);
+        };
+        browser_state(&raw)
+    }
+}
+
+fn browser_state(raw: &str) -> Result<Option<MediaState>, MediaError> {
+    let state: BrowserState = serde_json::from_str(&raw)?;
+    let state = MediaState {
+        title: state.title,
+        artist: non_empty(state.artist),
+        album: None,
+        source: "YouTube Music".into(),
+        is_playing: state.is_playing,
+        duration: valid_time(state.duration),
+        position: valid_time(state.position),
+        volume: state
+            .volume
+            .filter(|value| value.is_finite() && (0. ..=1.).contains(value)),
+        artwork: None,
+        artwork_url: state.artwork.and_then(|value| artwork_url(&value)),
+        artwork_mime_type: None,
+    };
+
+    Ok(Some(state))
 }
 
 impl MediaController for DesktopController {
@@ -107,15 +118,24 @@ impl MediaController for DesktopController {
     }
 
     fn current_state(&self) -> Result<Option<MediaState>, MediaError> {
-        match self.youtube_music_state().map_err(chrome_setup_error)? {
-            Some(state) => Ok(Some(state)),
-            None => self.system.current_state(),
+        let system = self.system.current_state()?;
+        match system.as_ref().map(|state| state.source.as_str()) {
+            Some("com.google.Chrome") => self.youtube_music_state().map_err(chrome_setup_error),
+            Some("com.apple.Safari") => self
+                .safari_youtube_music_state()
+                .map_err(safari_setup_error),
+            Some(source) if is_browser(source) => Ok(None),
+            Some(_) => Ok(system),
+            None => self.youtube_music_state().map_err(chrome_setup_error),
         }
     }
 
     fn send(&self, command: MediaCommand) -> Result<(), MediaError> {
         if let MediaCommand::SetSystemVolume(volume) = command {
             return crate::system_volume::set(volume);
+        }
+        if !is_tab_specific(&command) && self.system.current_state()?.is_some() {
+            return self.system.send(command);
         }
         let script = command_script(&command)?;
         match run_in_youtube_music(&script).map_err(chrome_setup_error)? {
@@ -126,6 +146,39 @@ impl MediaController for DesktopController {
             None => self.system.send(command),
         }
     }
+}
+
+fn is_tab_specific(command: &MediaCommand) -> bool {
+    matches!(
+        command,
+        MediaCommand::SetVolume(_) | MediaCommand::PlaySong(_)
+    )
+}
+
+fn is_browser(source: &str) -> bool {
+    matches!(
+        source,
+        "com.apple.Safari"
+            | "com.google.Chrome"
+            | "com.brave.Browser"
+            | "com.microsoft.edgemac"
+            | "company.thebrowser.Browser"
+            | "org.mozilla.firefox"
+    )
+}
+
+fn run_in_safari_youtube_music(javascript: &str) -> Result<Option<String>, MediaError> {
+    let output = Command::new("/usr/bin/osascript")
+        .args(["-e", SAFARI_SCRIPT, javascript])
+        .output()
+        .map_err(MediaError::LaunchFailed)?;
+    if !output.status.success() {
+        return Err(MediaError::CommandFailed(
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        ));
+    }
+    let output = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    Ok((output != NO_TAB).then_some(output))
 }
 
 fn run_in_youtube_music(javascript: &str) -> Result<Option<String>, MediaError> {
@@ -213,6 +266,17 @@ fn chrome_setup_error(error: MediaError) -> MediaError {
     }
 }
 
+fn safari_setup_error(error: MediaError) -> MediaError {
+    let message = error.to_string();
+    if message.contains("JavaScript from Apple Events") || message.contains("not authorized") {
+        MediaError::CommandFailed(
+            "Allow Music Remote to control Safari, then enable Develop > Allow JavaScript from Apple Events in Safari".into(),
+        )
+    } else {
+        error
+    }
+}
+
 fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
@@ -249,6 +313,23 @@ struct BrowserState {
 }
 
 const NO_TAB: &str = "__YT_REMOTE_NO_TAB__";
+const SAFARI_SCRIPT: &str = r#"
+on run argv
+  if not (application "Safari" is running) then return "__YT_REMOTE_NO_TAB__"
+  set pageScript to item 1 of argv
+  tell application "Safari"
+    repeat with browserWindow in windows
+      repeat with browserTab in tabs of browserWindow
+        set tabURL to URL of browserTab
+        if tabURL starts with "https://music.youtube.com/" then
+          return do JavaScript pageScript in browserTab
+        end if
+      end repeat
+    end repeat
+  end tell
+  return "__YT_REMOTE_NO_TAB__"
+end run
+"#;
 const CHROME_SCRIPT: &str = r#"
 on run argv
   if not (application "Google Chrome" is running) then return "__YT_REMOTE_NO_TAB__"
@@ -405,5 +486,38 @@ mod tests {
             state.artwork.as_deref(),
             Some("https://lh3.googleusercontent.com/cover")
         );
+    }
+
+    #[test]
+    fn recognizes_browsers_that_require_music_provider_confirmation() {
+        for source in [
+            "com.apple.Safari",
+            "com.google.Chrome",
+            "com.brave.Browser",
+            "com.microsoft.edgemac",
+            "company.thebrowser.Browser",
+            "org.mozilla.firefox",
+        ] {
+            assert!(is_browser(source));
+        }
+        assert!(!is_browser("com.apple.Music"));
+        assert!(!is_browser("com.spotify.client"));
+    }
+
+    #[test]
+    fn only_provider_enhancements_bypass_the_active_system_player() {
+        assert!(!is_tab_specific(&MediaCommand::Play));
+        assert!(!is_tab_specific(&MediaCommand::Seek(10.)));
+        assert!(is_tab_specific(&MediaCommand::SetVolume(0.5)));
+        assert!(is_tab_specific(&MediaCommand::PlaySong(
+            "aB1_-Cd2Ef3".into()
+        )));
+    }
+
+    #[test]
+    fn safari_adapter_targets_only_youtube_music() {
+        assert!(SAFARI_SCRIPT.contains("https://music.youtube.com/"));
+        assert!(!SAFARI_SCRIPT.contains("https://www.youtube.com/"));
+        assert!(SAFARI_SCRIPT.contains("do JavaScript pageScript"));
     }
 }

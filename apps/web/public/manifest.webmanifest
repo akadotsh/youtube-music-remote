@@ -1,7 +1,7 @@
 {
   "name": "YouTube Music Remote",
   "short_name": "Music Remote",
-  "description": "Control YouTube Music playing in Chrome on your Mac.",
+  "description": "Control music playing on your Mac from your phone.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#e0dbd2",

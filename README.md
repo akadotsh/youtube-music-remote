@@ -5,9 +5,9 @@
   <img src="docs/screenshots/mobile-player.jpeg" alt="Phone remote showing artwork, track information, seeking, playback controls and the volume, search and settings buttons" width="300">
 </p>
 
-Control YouTube Music on your Mac from your phone. Music plays on the Mac; your phone is the remote, not an audio streaming destination.
+Control music playing on your Mac from your phone. Music plays on the Mac; your phone is the remote, not an audio streaming destination.
 
-The desktop agent controls an existing YouTube Music tab in Chrome. The installable PWA sends commands through your self-hosted relay. Album artwork shown in the screenshots belongs to its respective owners.
+The desktop agent controls the active music session in Safari, Chrome, or another compatible player. Browser video sessions are ignored. YouTube Music in Chrome additionally supports search and tab-specific volume. The installable PWA sends commands through your self-hosted relay. Album artwork shown in the screenshots belongs to its respective owners.
 
 ## What works
 
@@ -17,7 +17,7 @@ The desktop agent controls an existing YouTube Music tab in Chrome. The installa
 - Separate Mac output-volume control, affecting all system audio; hidden when unavailable
 - Search songs from the phone and play a result in the existing YouTube Music tab
 - Current title, artist, artwork, duration, and playback position
-- YouTube Music stays selected when another Chrome tab starts playing media
+- The active music session stays selected across compatible browsers and players
 - A native GPUI desktop player with live media updates
 - Compact now-playing controls remain available while browsing phone search results
 - Optional **Keep awake while playing** checkbox in the desktop agent
@@ -27,7 +27,7 @@ The desktop agent controls an existing YouTube Music tab in Chrome. The installa
 
 ## How it works
 
-1. Run the desktop agent and open YouTube Music in Chrome on your Mac.
+1. Run the desktop agent and start playing music in a compatible browser or player on your Mac.
 2. Deploy your own relay and PWA using the steps below.
 3. In the desktop agent, select **Connect phone**, enter your relay URL, and create a pairing code.
 4. Open the PWA on your phone and enter the same relay URL and pairing code.
@@ -38,10 +38,10 @@ There is no shared hosted relay: each user deploys their own. The relay carries 
 ## Limitations
 
 - The Mac must stay awake and connected to the internet, with the desktop agent running. Manual Sleep and lid-close sleep interrupt playback and phone control.
-- Chrome needs **View → Developer → Allow JavaScript from Apple Events** enabled. macOS may also ask you to allow the agent to control Chrome.
+- YouTube Music search and tab-specific volume need Chrome with **View → Developer → Allow JavaScript from Apple Events** enabled. macOS may also ask you to allow the agent to control Chrome.
 - Search currently supports songs, not playlist browsing or playlist search. Selecting a result plays it in the existing Music tab.
 - Some audio outputs do not expose Mac system-volume control. Music volume remains separate from Mac output volume.
-- YouTube Music is the primary target. MediaRemote provides a fallback for other players, but YouTube Music search and tab-specific controls do not apply to them.
+- Playback control depends on the active player publishing a macOS media session. YouTube Music search and tab-specific volume remain Chrome-only.
 - The desktop bundle is ad-hoc signed, not notarized. The PWA is currently tested on Android; other mobile platforms are not verified.
 
 ## Requirements
