@@ -92,11 +92,12 @@ export function MiniPlayer({ remote, onOpen }: { remote: ReturnType<typeof useRe
   </footer>;
 }
 
-function SongSearch({ remote, onPlay }: { remote: ReturnType<typeof useRemote>; onPlay: () => void }) {
+export function SongSearch({ remote, onPlay }: { remote: ReturnType<typeof useRemote>; onPlay: () => void }) {
   const [query, setQuery] = useState("");
   const connected = remote.status === "connected" && remote.peerConnected;
   return (
-    <section className="py-6">
+    <section className="search-screen">
+      <div className="search-header">
       <h2 className="text-xl font-semibold">Search songs</h2>
       <form className="song-search mt-4" onSubmit={(event) => { event.preventDefault(); remote.search(query); }}>
         <label className="sr-only" htmlFor="song-search">Song or artist</label>
@@ -110,7 +111,8 @@ function SongSearch({ remote, onPlay }: { remote: ReturnType<typeof useRemote>; 
       <div role="status" aria-live="polite" className="mt-4 text-sm text-muted-foreground">
         {remote.searching ? "Searching…" : remote.searchResults ? `${remote.searchResults.length} songs found` : ""}
       </div>
-      <ul className="search-results mt-3">
+      </div>
+      <ul className="search-results mt-3" aria-label="Search results">
         {remote.searchResults?.map((song) => (
           <li key={song.videoId} className="flex items-center gap-3 py-3">
             {song.artwork && <img src={song.artwork} alt="" className="size-12 flex-none rounded-lg object-cover" />}
