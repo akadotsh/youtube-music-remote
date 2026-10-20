@@ -87,10 +87,7 @@ fn command_script(command: &MediaCommand) -> Result<String, MediaError> {
             ),
         MediaCommand::Seek(_) => return Err(MediaError::InvalidSeek),
         MediaCommand::SetVolume(volume) if volume.is_finite() && (0. ..=1.).contains(volume) => {
-            PLAYER_COMMAND.replace(
-                "COMMAND",
-                &format!("video.volume = {volume}; video.muted = false"),
-            )
+            VOLUME_COMMAND.replace("VOLUME", &(volume * 100.).to_string())
         }
         MediaCommand::SetVolume(_) => {
             return Err(MediaError::CommandFailed(
@@ -169,6 +166,8 @@ end run
 
 const READ_STATE: &str = r#"(() => {
   const video = document.querySelector('video');
+  const sliderVolume = Number(document.querySelector('ytmusic-player-bar #volume-slider')?.value);
+  const volume = Number.isFinite(sliderVolume) && sliderVolume >= 0 && sliderVolume <= 100 ? sliderVolume / 100 : video?.volume;
   const text = (selectors) => selectors.map((selector) => document.querySelector(selector)).find(Boolean)?.textContent?.trim() || '';
   const cover = document.querySelector('ytmusic-player-bar img');
   return JSON.stringify({
@@ -176,7 +175,7 @@ const READ_STATE: &str = r#"(() => {
     artist: text(['ytmusic-player-bar .byline', '.content-info-wrapper .byline']),
     artwork: cover?.currentSrc || cover?.src || null,
     isPlaying: Boolean(video && !video.paused && !video.ended),
-    volume: video ? (video.muted ? 0 : video.volume) : null,
+    volume: video ? (video.muted ? 0 : volume) : null,
     duration: Number.isFinite(video?.duration) ? video.duration : null,
     position: Number.isFinite(video?.currentTime) ? video.currentTime : null
   });
@@ -186,6 +185,15 @@ const PLAYER_COMMAND: &str = r#"(() => {
   const video = document.querySelector('video');
   if (!video) return 'missing';
   COMMAND;
+  return 'ok';
+})()"#;
+const VOLUME_COMMAND: &str = r#"(() => {
+  const bar = document.querySelector('ytmusic-player-bar');
+  const player = document.querySelector('#movie_player');
+  if (typeof bar?.updateVolume !== 'function' || typeof player?.unMute !== 'function') return 'missing';
+  player.unMute();
+  // Updating the player bar preserves its setting across track changes.
+  bar.updateVolume(VOLUME);
   return 'ok';
 })()"#;
 const BUTTON_COMMAND: &str = r#"(() => {
@@ -234,7 +242,8 @@ mod tests {
     fn builds_tab_volume_commands_and_rejects_invalid_levels() {
         for volume in [0., 0.5, 1.] {
             let script = command_script(&MediaCommand::SetVolume(volume)).unwrap();
-            assert!(script.contains(&format!("video.volume = {volume}; video.muted = false")));
+            assert!(script.contains(&format!("bar.updateVolume({})", volume * 100.)));
+            assert!(!script.contains("video.volume ="));
         }
         for volume in [-0.1, 1.1, f64::NAN, f64::INFINITY] {
             assert!(command_script(&MediaCommand::SetVolume(volume)).is_err());
