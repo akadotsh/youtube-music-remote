@@ -1,5 +1,6 @@
 mod media;
 mod relay;
+mod system_volume;
 mod youtube_music;
 
 pub use media::{MediaCommand, MediaController, MediaError, MediaRemoteAdapter, MediaState};

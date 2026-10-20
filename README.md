@@ -10,6 +10,7 @@ The Rust controller in [`apps/desktop`](apps/desktop) targets an open YouTube Mu
 
 - Play, pause, previous, next, and seeking
 - Phone volume slider for the YouTube Music tab, independent of other Mac audio
+- Separate Mac output-volume slider, affecting all system audio
 - Current title, artist, artwork, duration, and playback position
 - YouTube Music stays selected when another Chrome tab starts playing media
 - A native GPUI desktop player with live media updates

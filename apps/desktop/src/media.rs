@@ -25,6 +25,7 @@ pub enum MediaCommand {
     Previous,
     Seek(f64),
     SetVolume(f64),
+    SetSystemVolume(f64),
 }
 
 pub trait MediaController {
@@ -120,6 +121,9 @@ impl MediaRemoteAdapter {
             MediaCommand::Seek(_) => Err(MediaError::InvalidSeek),
             MediaCommand::SetVolume(_) => Err(MediaError::CommandFailed(
                 "Volume control requires an open YouTube Music tab".into(),
+            )),
+            MediaCommand::SetSystemVolume(_) => Err(MediaError::CommandFailed(
+                "Mac volume must be controlled through the desktop controller".into(),
             )),
         }
     }

@@ -19,7 +19,7 @@ export function useRemote(connection: SavedConnection | undefined) {
   const socketRef = useRef<WebSocket | null>(null);
   const reportedState = useRef<PlayerState | undefined>(undefined);
   const pending = useRef<PendingControls>({});
-  const volumeQueue = useRef(new VolumeQueue());
+  const volumeQueues = useRef({ volume: new VolumeQueue(), systemVolume: new VolumeQueue() });
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -53,17 +53,19 @@ export function useRemote(connection: SavedConnection | undefined) {
           for (const control of Object.values(pending.current)) {
             if (control.requestId === message.requestId) control.acknowledged = true;
           }
-          const requestId = volumeQueue.current.acknowledge(message.requestId,
-            (volume) => sendOn(socket, { type: "SET_VOLUME", volume }));
-          if (requestId && pending.current.volume) {
-            pending.current.volume.requestId = requestId;
+          for (const key of ["volume", "systemVolume"] as const) {
+            const type = key === "volume" ? "SET_VOLUME" : "SET_SYSTEM_VOLUME";
+            const requestId = volumeQueues.current[key].acknowledge(message.requestId,
+              (volume) => sendOn(socket, { type, volume }));
+            const control = pending.current[key];
+            if (requestId && control) control.requestId = requestId;
           }
           setState(reconcileControls(reportedState.current, pending.current));
         }
         if (message.type === "PEER_STATUS") setPeerConnected(message.connected);
         if (message.type === "ERROR") {
           pending.current = {};
-          volumeQueue.current.reset();
+          Object.values(volumeQueues.current).forEach((queue) => queue.reset());
           setState(reportedState.current);
           setError(message.message);
         }
@@ -74,7 +76,7 @@ export function useRemote(connection: SavedConnection | undefined) {
         setPeerConnected(false);
         clearTimeout(feedbackTimer.current);
         pending.current = {};
-        volumeQueue.current.reset();
+        Object.values(volumeQueues.current).forEach((queue) => queue.reset());
         setState(reportedState.current);
         if (active) {
           timer = setTimeout(connect, delay);
@@ -89,7 +91,7 @@ export function useRemote(connection: SavedConnection | undefined) {
       clearTimeout(timer);
       clearTimeout(feedbackTimer.current);
       pending.current = {};
-      volumeQueue.current.reset();
+      Object.values(volumeQueues.current).forEach((queue) => queue.reset());
       socket.close();
     };
   }, [connection]);
@@ -102,12 +104,14 @@ export function useRemote(connection: SavedConnection | undefined) {
     if (command.type === "PLAY" || command.type === "PAUSE") {
       pending.current.isPlaying = { value: command.type === "PLAY", acknowledged: false, expiresAt };
     }
-    if (command.type === "SET_VOLUME") {
-      pending.current.volume = { value: command.volume, acknowledged: false, expiresAt };
-    }
-    if (command.type === "SET_VOLUME") {
-      pending.current.volume!.requestId = volumeQueue.current.send(command.volume,
-        (volume) => sendOn(socket, { type: "SET_VOLUME", volume }));
+    if (command.type === "SET_VOLUME" || command.type === "SET_SYSTEM_VOLUME") {
+      const key = command.type === "SET_VOLUME" ? "volume" : "systemVolume";
+      const type = command.type;
+      pending.current[key] = {
+        value: command.volume, acknowledged: false, expiresAt,
+        requestId: volumeQueues.current[key].send(command.volume,
+          (volume) => sendOn(socket, { type, volume })),
+      };
     } else {
       const requestId = sendOn(socket, command);
       if (command.type === "PLAY" || command.type === "PAUSE") {
@@ -119,7 +123,7 @@ export function useRemote(connection: SavedConnection | undefined) {
     feedbackTimer.current = setTimeout(() => {
       if (Object.keys(pending.current).length) setError("The Mac did not confirm the change. Try again.");
       pending.current = {};
-      volumeQueue.current.reset();
+      Object.values(volumeQueues.current).forEach((queue) => queue.reset());
       setState(reportedState.current);
     }, 5_000);
   }, []);

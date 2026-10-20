@@ -30,3 +30,18 @@ queue.reset();
 assert.equal(queue.acknowledge("volume-2", transmit), undefined);
 assert.equal(queue.send(0.5, transmit), "volume-3");
 assert.deepEqual(sent, [0.2, 0, 0.5]);
+
+const macState = { ...state, systemVolume: 0.7 };
+const macPending = { systemVolume: { value: 0.3, acknowledged: true, expiresAt: 5_000 } };
+const preview = reconcileControls(macState, macPending, 1_000);
+assert.equal(preview.systemVolume, 0.3);
+assert.equal(preview.volume, state.volume);
+reconcileControls({ ...macState, systemVolume: 0.3 }, macPending, 1_000);
+assert.equal(macPending.systemVolume, undefined);
+const musicQueue = new VolumeQueue();
+const macQueue = new VolumeQueue();
+assert.equal(musicQueue.send(0.2, () => "music-1"), "music-1");
+assert.equal(macQueue.send(0.6, () => "mac-1"), "mac-1");
+musicQueue.send(0.4, () => assert.fail("Music update must wait for its ACK"));
+assert.equal(macQueue.acknowledge("music-1", () => assert.fail("Wrong queue ACK")), undefined);
+assert.equal(musicQueue.acknowledge("music-1", (volume) => { assert.equal(volume, 0.4); return "music-2"; }), "music-2");

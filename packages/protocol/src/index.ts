@@ -18,6 +18,7 @@ export type Command =
   | { type: "PREVIOUS" }
   | { type: "SEEK"; position: number }
   | { type: "SET_VOLUME"; volume: number }
+  | { type: "SET_SYSTEM_VOLUME"; volume: number }
   | { type: "GET_STATE" };
 
 export type PlayerState = {
@@ -28,6 +29,7 @@ export type PlayerState = {
   position: number;
   isPlaying: boolean;
   volume?: number;
+  systemVolume?: number;
   source?: string;
   capabilities?: PlayerCapabilities;
 };
@@ -56,6 +58,7 @@ const commandTypes = new Set([
   "PREVIOUS",
   "SEEK",
   "SET_VOLUME",
+  "SET_SYSTEM_VOLUME",
   "GET_STATE",
 ]);
 
@@ -110,7 +113,7 @@ function isCommand(value: unknown): value is Command {
   }
 
   if (value.type === "SEEK") return isFiniteNonNegative(value.position);
-  if (value.type === "SET_VOLUME") return isVolume(value.volume);
+  if (value.type === "SET_VOLUME" || value.type === "SET_SYSTEM_VOLUME") return isVolume(value.volume);
   return true;
 }
 
@@ -124,6 +127,7 @@ function isPlayerState(value: unknown): value is PlayerState {
     isFiniteNonNegative(value.position) &&
     typeof value.isPlaying === "boolean" &&
     (value.volume === undefined || isVolume(value.volume)) &&
+    (value.systemVolume === undefined || isVolume(value.systemVolume)) &&
     (value.source === undefined || typeof value.source === "string") &&
     (value.capabilities === undefined || isPlayerCapabilities(value.capabilities))
   );

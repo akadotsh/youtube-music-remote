@@ -81,9 +81,9 @@ pub fn run_relay(
         while !state_cancelled.load(Ordering::Relaxed) {
             match state_controller.current_state() {
                 Ok(state) => {
-                    if let Ok(message) = serde_json::to_string(&DesktopMessage::State {
-                        state: PlayerState::from(state),
-                    }) {
+                    let mut state = PlayerState::from(state);
+                    state.system_volume = crate::system_volume::current().ok();
+                    if let Ok(message) = serde_json::to_string(&DesktopMessage::State { state }) {
                         let _ = states_tx.try_send(message);
                     }
                 }
@@ -237,6 +237,12 @@ fn execute(controller: &dyn MediaController, command: RelayCommand) -> RelayResu
             Ok(controller.send(MediaCommand::SetVolume(volume))?)
         }
         RelayCommand::SetVolume { .. } => Err("volume must be between 0 and 1".into()),
+        RelayCommand::SetSystemVolume { volume }
+            if volume.is_finite() && (0. ..=1.).contains(&volume) =>
+        {
+            Ok(controller.send(MediaCommand::SetSystemVolume(volume))?)
+        }
+        RelayCommand::SetSystemVolume { .. } => Err("Mac volume must be between 0 and 1".into()),
     }
 }
 
@@ -336,6 +342,7 @@ enum RelayCommand {
     Previous,
     Seek { position: f64 },
     SetVolume { volume: f64 },
+    SetSystemVolume { volume: f64 },
     GetState,
 }
 
@@ -370,6 +377,8 @@ struct PlayerState {
     #[serde(skip_serializing_if = "Option::is_none")]
     volume: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    system_volume: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<String>,
     capabilities: Capabilities,
 }
@@ -385,6 +394,7 @@ impl From<Option<MediaState>> for PlayerState {
                 position: 0.,
                 is_playing: false,
                 volume: None,
+                system_volume: None,
                 source: None,
                 capabilities: Capabilities::default(),
             };
@@ -408,6 +418,7 @@ impl From<Option<MediaState>> for PlayerState {
             volume: state
                 .volume
                 .filter(|value| value.is_finite() && (0. ..=1.).contains(value)),
+            system_volume: None,
             source: Some(state.source),
             capabilities: Capabilities::default(),
         }
@@ -497,19 +508,32 @@ mod tests {
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
         assert_eq!(response["type"], "ACK");
         assert_eq!(response["requestId"], "volume-1");
+        handle_message(
+            &mut socket,
+            &Controller(MediaCommand::SetSystemVolume(0.6)),
+            r#"{"type":"COMMAND","requestId":"system-1","command":{"type":"SET_SYSTEM_VOLUME","volume":0.6}}"#,
+            &events,
+            "",
+        ).unwrap();
+        let response = client.read().unwrap().into_text().unwrap();
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["type"], "ACK");
+        assert_eq!(response["requestId"], "system-1");
         for volume in [-0.1, 1.1] {
-            let raw = serde_json::json!({ "type": "COMMAND", "requestId": "invalid-volume", "command": { "type": "SET_VOLUME", "volume": volume } }).to_string();
-            handle_message(
-                &mut socket,
-                &Controller(MediaCommand::Pause),
-                &raw,
-                &events,
-                "",
-            )
-            .unwrap();
-            let response = client.read().unwrap().into_text().unwrap();
-            let response: serde_json::Value = serde_json::from_str(&response).unwrap();
-            assert_eq!(response["type"], "ERROR");
+            for command_type in ["SET_VOLUME", "SET_SYSTEM_VOLUME"] {
+                let raw = serde_json::json!({ "type": "COMMAND", "requestId": "invalid-volume", "command": { "type": command_type, "volume": volume } }).to_string();
+                handle_message(
+                    &mut socket,
+                    &Controller(MediaCommand::Pause),
+                    &raw,
+                    &events,
+                    "",
+                )
+                .unwrap();
+                let response = client.read().unwrap().into_text().unwrap();
+                let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+                assert_eq!(response["type"], "ERROR");
+            }
         }
     }
 
@@ -571,5 +595,6 @@ mod tests {
         assert!(value["state"].get("artwork").is_none());
         assert!(value["state"].get("source").is_none());
         assert!(value["state"].get("volume").is_none());
+        assert!(value["state"].get("systemVolume").is_none());
     }
 }

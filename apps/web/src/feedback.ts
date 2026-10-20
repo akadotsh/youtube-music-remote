@@ -1,6 +1,6 @@
 import type { PlayerState } from "@yt-remote/protocol";
 
-export type PendingControls = Partial<Record<"isPlaying" | "volume", {
+export type PendingControls = Partial<Record<"isPlaying" | "volume" | "systemVolume", {
   value: boolean | number;
   requestId?: string;
   acknowledged: boolean;
@@ -10,7 +10,7 @@ export type PendingControls = Partial<Record<"isPlaying" | "volume", {
 export function reconcileControls(state: PlayerState | undefined, pending: PendingControls, now = Date.now()): PlayerState | undefined {
   if (!state) return state;
   const next = { ...state };
-  for (const key of ["isPlaying", "volume"] as const) {
+  for (const key of ["isPlaying", "volume", "systemVolume"] as const) {
     const control = pending[key];
     if (!control) continue;
     if (now >= control.expiresAt || (control.acknowledged && state[key] === control.value)) {

@@ -51,6 +51,9 @@ impl MediaController for DesktopController {
     }
 
     fn send(&self, command: MediaCommand) -> Result<(), MediaError> {
+        if let MediaCommand::SetSystemVolume(volume) = command {
+            return crate::system_volume::set(volume);
+        }
         let script = command_script(&command)?;
         match run_in_youtube_music(&script).map_err(chrome_setup_error)? {
             Some(result) if result == "ok" => Ok(()),
@@ -92,6 +95,11 @@ fn command_script(command: &MediaCommand) -> Result<String, MediaError> {
         MediaCommand::SetVolume(_) => {
             return Err(MediaError::CommandFailed(
                 "Volume must be between 0 and 1".into(),
+            ));
+        }
+        MediaCommand::SetSystemVolume(_) => {
+            return Err(MediaError::CommandFailed(
+                "Mac volume does not use Chrome".into(),
             ));
         }
         MediaCommand::Next => BUTTON_COMMAND.replace("SELECTORS", NEXT_SELECTORS),

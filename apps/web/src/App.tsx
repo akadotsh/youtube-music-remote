@@ -90,18 +90,23 @@ function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
         <Button size="largeIcon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-8 fill-current" /> : <Play className="ml-1 size-8 fill-current" />}</Button>
         <Button variant="ghost" size="icon" aria-label="Next track" onClick={() => remote.send({ type: "NEXT" })}><SkipForward className="size-7 fill-current" /></Button>
       </div>
-      {state.volume !== undefined && (
-        <div className="mt-7">
+      {[
+        { id: "music-volume", label: "Music volume", value: state.volume, type: "SET_VOLUME" as const },
+        { id: "mac-volume", label: "Mac volume", value: state.systemVolume, type: "SET_SYSTEM_VOLUME" as const },
+      ].map((control) => (control.value !== undefined || control.type === "SET_SYSTEM_VOLUME") && (
+        <div key={control.id} className="mt-7">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <label htmlFor="music-volume">Music volume</label>
-            <span>{Math.round(state.volume * 100)}%</span>
+            <label htmlFor={control.id}>{control.label}</label>
+            <span>{control.value === undefined ? "Unavailable" : `${Math.round(control.value * 100)}%`}</span>
           </div>
-          <input id="music-volume" type="range" min="0" max="100" step="1"
-            value={Math.round(state.volume * 100)}
-            onChange={(event) => remote.send({ type: "SET_VOLUME", volume: Number(event.currentTarget.value) / 100 })}
+          <input id={control.id} type="range" min="0" max="100" step="1"
+            disabled={control.value === undefined}
+            value={Math.round((control.value ?? 0) * 100)}
+            onChange={(event) => remote.send({ type: control.type, volume: Number(event.currentTarget.value) / 100 })}
             className="mt-2 w-full accent-primary" />
+          {control.type === "SET_SYSTEM_VOLUME" && <p className="mt-1 text-xs text-muted-foreground">{control.value === undefined ? "Mac volume is unavailable for this audio output" : "Changes all Mac audio"}</p>}
         </div>
-      )}
+      ))}
       {remote.error && <ErrorMessage message={remote.error} dismiss={() => remote.setError("")} />}
     </div>
   );
