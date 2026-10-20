@@ -70,7 +70,7 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col">{searchOpen ? <SongSearch remote={remote} onPlay={() => setSearchOpen(false)} /> : <Player remote={remote} />}</div>
+      <div className="app-content">{searchOpen ? <SongSearch remote={remote} onPlay={() => setSearchOpen(false)} /> : <Player remote={remote} />}</div>
     </main>
   );
 }
@@ -112,16 +112,16 @@ function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
   const shownPosition = seek ?? state.position;
 
   return (
-    <div className="player flex flex-1 flex-col py-6">
-      <p className="eyebrow mb-5">Now playing{state.source ? ` · ${state.source}` : ""}</p>
+    <div className="player flex flex-1 flex-col py-3">
+      <p className="eyebrow mb-3">Now playing{state.source ? ` · ${state.source}` : ""}</p>
       <div className="player-artwork aspect-square overflow-hidden rounded-2xl bg-muted">
         {state.artwork ? <img src={state.artwork} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-muted-foreground"><Play className="size-20" /></div>}
       </div>
-      <h2 className="mt-6 truncate text-2xl font-semibold">{state.title || "Nothing playing"}</h2>
+      <h2 className="mt-4 truncate text-2xl font-semibold">{state.title || "Nothing playing"}</h2>
       <p className="mt-1 truncate text-muted-foreground">{state.artist || "Start music on your Mac"}</p>
       <input aria-label="Playback position" type="range" min="0" max={Math.max(state.duration, 1)} value={shownPosition} onChange={(event) => setSeek(Number(event.target.value))} onPointerUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} onKeyUp={() => { if (seek !== undefined) remote.send({ type: "SEEK", position: seek }); setSeek(undefined); }} className="mt-4 w-full" />
       <div className="time-label flex justify-between text-xs text-muted-foreground"><span>{time(shownPosition)}</span><span>{time(state.duration)}</span></div>
-      <div className="my-5 flex items-center justify-center gap-5">
+      <div className="my-3 flex items-center justify-center gap-5">
         <Button variant="ghost" size="icon" aria-label="Previous track" onClick={() => remote.send({ type: "PREVIOUS" })}><SkipBack className="size-7 fill-current" /></Button>
         <Button size="largeIcon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-8 fill-current" /> : <Play className="ml-1 size-8 fill-current" />}</Button>
         <Button variant="ghost" size="icon" aria-label="Next track" onClick={() => remote.send({ type: "NEXT" })}><SkipForward className="size-7 fill-current" /></Button>
