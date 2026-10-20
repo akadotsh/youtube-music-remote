@@ -1,5 +1,5 @@
 import type { DeviceCredential, PlayerState } from "@yt-remote/protocol";
-import { Pause, Play, RotateCcw, Search, SkipBack, SkipForward, Unplug, X } from "lucide-react";
+import { Pause, Play, RotateCcw, Search, SkipBack, SkipForward, Unplug, Volume2, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./components/ui/button";
 import { type SavedConnection, useRemote } from "./useRemote";
@@ -106,15 +106,15 @@ function SongSearch({ remote, onPlay }: { remote: ReturnType<typeof useRemote>; 
   );
 }
 
-function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
+export function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
   const state = remote.state ?? emptyState;
   const [seek, setSeek] = useState<number>();
   const shownPosition = seek ?? state.position;
 
   return (
-    <div className="player flex flex-1 flex-col py-3">
+    <div className="player">
       <p className="eyebrow mb-3">Now playing{state.source ? ` · ${state.source}` : ""}</p>
-      <div className="player-artwork aspect-square overflow-hidden rounded-2xl bg-muted">
+      <div className="player-artwork overflow-hidden rounded-2xl bg-muted">
         {state.artwork ? <img src={state.artwork} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-muted-foreground"><Play className="size-20" /></div>}
       </div>
       <h2 className="mt-4 truncate text-2xl font-semibold">{state.title || "Nothing playing"}</h2>
@@ -126,25 +126,25 @@ function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
         <Button size="largeIcon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-8 fill-current" /> : <Play className="ml-1 size-8 fill-current" />}</Button>
         <Button variant="ghost" size="icon" aria-label="Next track" onClick={() => remote.send({ type: "NEXT" })}><SkipForward className="size-7 fill-current" /></Button>
       </div>
-      {[
-        { id: "music-volume", label: "Music volume", value: state.volume, type: "SET_VOLUME" as const },
-        { id: "mac-volume", label: "Mac volume", value: state.systemVolume, type: "SET_SYSTEM_VOLUME" as const },
-      ].map((control) => control.value !== undefined && (
-        <div key={control.id} className="volume-control mt-3">
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <label htmlFor={control.id}>{control.label}</label>
-            <span className="time-label">{Math.round(control.value * 100)}%</span>
-          </div>
-          <input id={control.id} type="range" min="0" max="100" step="1"
-            value={Math.round(control.value * 100)}
-            onChange={(event) => remote.send({ type: control.type, volume: Number(event.currentTarget.value) / 100 })}
-            className="w-full" />
-          {control.type === "SET_SYSTEM_VOLUME" && <p className="mt-1 text-xs text-muted-foreground">Changes all Mac audio</p>}
-        </div>
-      ))}
+      {state.volume !== undefined && <VolumeControl id="music-volume" label="Music volume" value={state.volume} onChange={(volume) => remote.send({ type: "SET_VOLUME", volume })} />}
+      {state.systemVolume !== undefined && (
+        <details className="mac-audio">
+          <summary>Mac audio</summary>
+          <VolumeControl id="mac-volume" label="Mac volume" value={state.systemVolume} onChange={(volume) => remote.send({ type: "SET_SYSTEM_VOLUME", volume })} />
+          <p className="text-xs text-muted-foreground">Changes all Mac audio</p>
+        </details>
+      )}
       {remote.error && <ErrorMessage message={remote.error} dismiss={() => remote.setError("")} />}
     </div>
   );
+}
+
+function VolumeControl({ id, label, value, onChange }: { id: string; label: string; value: number; onChange: (value: number) => void }) {
+  return <div className="volume-control">
+    <label htmlFor={id} title={label}><Volume2 className="size-4" aria-hidden="true" /><span className="sr-only">{label}</span></label>
+    <input id={id} type="range" min="0" max="100" step="1" value={Math.round(value * 100)} onChange={(event) => onChange(Number(event.currentTarget.value) / 100)} />
+    <span className="time-label text-xs text-muted-foreground">{Math.round(value * 100)}%</span>
+  </div>;
 }
 
 function ErrorMessage({ message, dismiss }: { message: string; dismiss: () => void }) {
