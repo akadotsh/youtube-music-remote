@@ -41,7 +41,7 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
   }
 
   return (
-    <main className="app-shell glass-surface pairing-shell">
+    <main className="app-shell pairing-shell">
       <div className="brand-mark"><Play className="size-6 fill-current" aria-hidden="true" /></div>
       <p className="eyebrow mt-6">Music Remote</p>
       <h1 className="mt-2 text-3xl font-semibold leading-tight">Connect to your Mac</h1>
@@ -61,7 +61,7 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
   const [searchOpen, setSearchOpen] = useState(false);
 
   return (
-    <main className="app-shell glass-surface">
+    <main className="app-shell">
       <header className="app-header">
         <div className="min-w-0"><h1 className="font-semibold">Music Remote</h1><p className="connection-status" role="status"><span aria-hidden="true" className={`status-dot ${remote.status === "connected" && remote.peerConnected ? "is-connected" : ""}`} />{remote.status === "connected" ? (remote.peerConnected ? "Mac connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
         <div className="flex">

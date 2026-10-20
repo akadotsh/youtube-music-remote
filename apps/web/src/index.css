@@ -15,11 +15,8 @@
   color-scheme: light dark;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-optical-sizing: auto;
-  --glass: rgb(248 246 240 / 78%);
-  --glass-edge: rgb(255 255 255 / 72%);
   --field: rgb(45 42 38 / 7%);
   --field-hover: rgb(45 42 38 / 12%);
-  --ambient: rgb(255 248 229 / 85%);
   --shadow: rgb(40 39 46 / 14%);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -34,11 +31,8 @@
     --color-primary-foreground: #25272c;
     --color-accent: #bcb7ae;
     --color-danger: #ffa4ae;
-    --glass: rgb(39 40 45 / 86%);
-    --glass-edge: rgb(255 255 255 / 13%);
     --field: rgb(255 255 255 / 7%);
     --field-hover: rgb(255 255 255 / 12%);
-    --ambient: rgb(117 100 79 / 28%);
     --shadow: rgb(0 0 0 / 30%);
   }
 }
@@ -58,8 +52,7 @@ body {
   height: 100dvh;
   overflow: hidden;
   color: var(--color-foreground);
-  background: radial-gradient(ellipse at 5% 0%, var(--ambient), transparent 65%),
-    radial-gradient(ellipse at 95% 90%, rgb(120 113 103 / 24%), transparent 65%);
+  background: var(--color-background);
 }
 button, input { font: inherit; }
 input { font-size: 16px; }
@@ -70,11 +63,6 @@ button, a, [role="button"] {
 }
 h1, h2 { letter-spacing: -0.025em; text-wrap: balance; }
 
-.glass-surface {
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(16px) saturate(125%);
-  backdrop-filter: blur(16px) saturate(125%);
-}
 .glass-field {
   -webkit-appearance: none;
   appearance: none;
@@ -98,6 +86,8 @@ h1, h2 { letter-spacing: -0.025em; text-wrap: balance; }
   caret-color: currentColor;
 }
 .song-search input::placeholder { color: var(--color-muted-foreground); opacity: 1; }
+.song-search input::selection { background: var(--color-muted); color: var(--color-foreground); }
+.song-search input:focus-visible { outline: none; }
 .song-search:focus-within { box-shadow: inset 0 0 0 1px var(--color-muted-foreground); }
 :where(button, input, a):focus-visible {
   outline: 2px solid var(--color-accent);
@@ -148,13 +138,6 @@ input[type="range"] { min-height: 36px; accent-color: var(--color-accent); curso
 @media (prefers-reduced-motion: reduce) {
   .control-button { transition: none; }
   .control-button:active { transform: none; }
-}
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .glass-surface {
-    background: var(--color-background);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }
 .player-artwork {
   width: min(100%, clamp(80px, calc(100dvh - 540px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 280px));
