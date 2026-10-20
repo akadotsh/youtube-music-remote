@@ -50,6 +50,7 @@ html {
   overscroll-behavior: none;
 }
 body {
+  display: flow-root;
   margin: 0;
   min-width: 320px;
   min-height: 100dvh;
