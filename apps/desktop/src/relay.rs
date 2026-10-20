@@ -12,7 +12,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc::Sender,
+        mpsc::{self, Receiver, Sender},
     },
     thread,
     time::{Duration, Instant},
@@ -73,10 +73,38 @@ pub fn run_relay(
     cancelled: Arc<AtomicBool>,
     events: Sender<RelayEvent>,
 ) {
+    let (states_tx, states_rx) = mpsc::sync_channel(1);
+    let state_controller = Arc::clone(&controller);
+    let state_cancelled = Arc::clone(&cancelled);
+    let state_events = events.clone();
+    let poller = thread::spawn(move || {
+        while !state_cancelled.load(Ordering::Relaxed) {
+            match state_controller.current_state() {
+                Ok(state) => {
+                    if let Ok(message) = serde_json::to_string(&DesktopMessage::State {
+                        state: PlayerState::from(state),
+                    }) {
+                        let _ = states_tx.try_send(message);
+                    }
+                }
+                Err(error) => {
+                    let _ = state_events.send(RelayEvent::Error(error.to_string()));
+                }
+            }
+            thread::park_timeout(Duration::from_secs(1));
+        }
+    });
     let mut delay = Duration::from_secs(1);
     while !cancelled.load(Ordering::Relaxed) {
         let _ = events.send(RelayEvent::Status(RelayStatus::Connecting));
-        match connect_once(&connection, &controller, &cancelled, &events) {
+        match connect_once(
+            &connection,
+            &controller,
+            &cancelled,
+            &events,
+            &states_rx,
+            poller.thread(),
+        ) {
             Ok(()) if cancelled.load(Ordering::Relaxed) => return,
             Ok(()) => {}
             Err(error) => {
@@ -121,21 +149,25 @@ fn connect_once(
     controller: &DesktopController,
     cancelled: &AtomicBool,
     events: &Sender<RelayEvent>,
+    states: &Receiver<String>,
+    poller: &thread::Thread,
 ) -> RelayResult<()> {
     let mut socket = connect(websocket_url(connection)?.as_str())?.0;
     set_read_timeout(&mut socket, Some(Duration::from_millis(250)))?;
     let mut last_state = String::new();
-    let mut next_state = Instant::now();
 
     while !cancelled.load(Ordering::Relaxed) {
-        if Instant::now() >= next_state {
-            send_state(&mut socket, controller, &mut last_state, false)?;
-            next_state = Instant::now() + Duration::from_secs(1);
+        if let Ok(message) = states.try_recv()
+            && message != last_state
+        {
+            socket.send(Message::Text(message.clone().into()))?;
+            last_state = message;
         }
 
         match socket.read() {
             Ok(Message::Text(text)) => {
-                handle_message(&mut socket, controller, &text, events, &mut last_state)?
+                handle_message(&mut socket, controller, &text, events, &last_state)?;
+                poller.unpark();
             }
             Ok(Message::Close(_)) => return Ok(()),
             Ok(_) => {}
@@ -150,10 +182,10 @@ fn connect_once(
 
 fn handle_message(
     socket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
-    controller: &DesktopController,
+    controller: &dyn MediaController,
     raw: &str,
     events: &Sender<RelayEvent>,
-    last_state: &mut String,
+    last_state: &str,
 ) -> RelayResult<()> {
     match serde_json::from_str::<RelayMessage>(raw)? {
         RelayMessage::PeerStatus { connected } => {
@@ -167,6 +199,7 @@ fn handle_message(
             request_id,
             command,
         } => {
+            let get_state = matches!(command, RelayCommand::GetState);
             let result = execute(controller, command);
             let response = match &result {
                 Ok(_) => DesktopMessage::Ack {
@@ -178,8 +211,8 @@ fn handle_message(
                 },
             };
             socket.send(Message::Text(serde_json::to_string(&response)?.into()))?;
-            if result.is_ok() {
-                send_state(socket, controller, last_state, true)?;
+            if result.is_ok() && get_state && !last_state.is_empty() {
+                socket.send(Message::Text(last_state.to_owned().into()))?;
             }
         }
         RelayMessage::Error { message } => events.send(RelayEvent::Error(message))?,
@@ -187,7 +220,7 @@ fn handle_message(
     Ok(())
 }
 
-fn execute(controller: &DesktopController, command: RelayCommand) -> RelayResult<()> {
+fn execute(controller: &dyn MediaController, command: RelayCommand) -> RelayResult<()> {
     match command {
         RelayCommand::GetState => Ok(()),
         RelayCommand::Play => Ok(controller.send(MediaCommand::Play)?),
@@ -199,21 +232,6 @@ fn execute(controller: &DesktopController, command: RelayCommand) -> RelayResult
         }
         RelayCommand::Seek { .. } => Err("invalid seek position".into()),
     }
-}
-
-fn send_state(
-    socket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
-    controller: &DesktopController,
-    last_state: &mut String,
-    force: bool,
-) -> RelayResult<()> {
-    let state = PlayerState::from(controller.current_state()?);
-    let message = serde_json::to_string(&DesktopMessage::State { state })?;
-    if force || message != *last_state {
-        socket.send(Message::Text(message.clone().into()))?;
-        *last_state = message;
-    }
-    Ok(())
 }
 
 fn normalized_relay_url(value: &str) -> RelayResult<String> {
@@ -413,6 +431,49 @@ impl Default for Capabilities {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn acknowledges_pause_without_reading_media_state() {
+        struct Controller;
+        impl MediaController for Controller {
+            fn check_compatibility(&self) -> Result<(), crate::MediaError> {
+                Ok(())
+            }
+            fn current_state(&self) -> Result<Option<MediaState>, crate::MediaError> {
+                panic!("state polling must not block commands");
+            }
+            fn send(&self, command: MediaCommand) -> Result<(), crate::MediaError> {
+                assert_eq!(command, MediaCommand::Pause);
+                Ok(())
+            }
+        }
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let server = listener.accept().unwrap().0;
+        let mut socket = WebSocket::from_raw_socket(
+            MaybeTlsStream::Plain(server),
+            tungstenite::protocol::Role::Server,
+            None,
+        );
+        let mut client =
+            WebSocket::from_raw_socket(client, tungstenite::protocol::Role::Client, None);
+        let (events, _) = mpsc::channel();
+        handle_message(
+            &mut socket,
+            &Controller,
+            r#"{"type":"COMMAND","requestId":"pause-1","command":{"type":"PAUSE"}}"#,
+            &events,
+            "",
+        )
+        .unwrap();
+        let response = client.read().unwrap().into_text().unwrap();
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["type"], "ACK");
+        assert_eq!(response["requestId"], "pause-1");
+    }
 
     #[test]
     fn builds_authenticated_websocket_url() {
