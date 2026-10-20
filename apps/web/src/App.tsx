@@ -66,6 +66,7 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
       <header className="app-header">
         <div className="min-w-0"><h1 className="font-semibold">Music Remote</h1><p className="connection-status" role="status"><span aria-hidden="true" className={`status-dot ${remote.status === "connected" && remote.peerConnected ? "is-connected" : ""}`} />{remote.status === "connected" ? (remote.peerConnected ? "Mac connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
         <div className="flex">
+          {(remote.state?.volume !== undefined || remote.state?.systemVolume !== undefined) && <VolumePopover remote={remote} />}
           <Button variant={searchOpen ? "secondary" : "ghost"} size="icon" aria-label={searchOpen ? "Back to player" : "Search songs"} aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>
           <Button variant={settingsOpen ? "secondary" : "ghost"} size="icon" aria-label="Connection settings" aria-expanded={settingsOpen} aria-controls="connection-settings" onClick={() => setSettingsOpen(!settingsOpen)}><Settings className="size-5" /></Button>
         </div>
@@ -145,23 +146,30 @@ export function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
         <Button size="largeIcon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-8 fill-current" /> : <Play className="ml-1 size-8 fill-current" />}</Button>
         <Button variant="ghost" size="icon" aria-label="Next track" onClick={() => remote.send({ type: "NEXT" })}><SkipForward className="size-7 fill-current" /></Button>
       </div>
-      {state.volume !== undefined && <VolumeControl id="music-volume" label="Music volume" value={state.volume} onChange={(volume) => remote.send({ type: "SET_VOLUME", volume })} />}
-      {state.systemVolume !== undefined && (
-        <details className="mac-audio">
-          <summary>Mac audio</summary>
-          <VolumeControl id="mac-volume" label="Mac volume" value={state.systemVolume} onChange={(volume) => remote.send({ type: "SET_SYSTEM_VOLUME", volume })} />
-          <p className="text-xs text-muted-foreground">Changes all Mac audio</p>
-        </details>
-      )}
       {remote.error && <ErrorMessage message={remote.error} dismiss={() => remote.setError("")} />}
     </div>
   );
 }
 
+export function VolumePopover({ remote }: { remote: ReturnType<typeof useRemote> }) {
+  const state = remote.state ?? emptyState;
+  return <>
+    <Button variant="ghost" size="icon" aria-label="Volume controls" popoverTarget="volume-controls"><Volume2 className="size-5" /></Button>
+    <div id="volume-controls" popover="auto" className="volume-popover" role="group" aria-label="Volume controls">
+      <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-medium">Volume</h2><Button variant="ghost" size="icon" aria-label="Close volume controls" popoverTarget="volume-controls" popoverTargetAction="hide"><X className="size-4" /></Button></div>
+      <div className="flex justify-center gap-6">
+        {state.volume !== undefined && <VolumeControl id="music-volume" label="Music" value={state.volume} onChange={(volume) => remote.send({ type: "SET_VOLUME", volume })} />}
+        {state.systemVolume !== undefined && <VolumeControl id="mac-volume" label="Mac" value={state.systemVolume} onChange={(volume) => remote.send({ type: "SET_SYSTEM_VOLUME", volume })} />}
+      </div>
+      {state.systemVolume !== undefined && <p className="mt-3 text-xs text-muted-foreground">Mac changes all laptop audio</p>}
+    </div>
+  </>;
+}
+
 function VolumeControl({ id, label, value, onChange }: { id: string; label: string; value: number; onChange: (value: number) => void }) {
   return <div className="volume-control">
-    <label htmlFor={id} title={label}><Volume2 className="size-4" aria-hidden="true" /><span className="sr-only">{label}</span></label>
-    <input id={id} type="range" min="0" max="100" step="1" value={Math.round(value * 100)} onChange={(event) => onChange(Number(event.currentTarget.value) / 100)} />
+    <label htmlFor={id} className="text-xs font-medium">{label}</label>
+    <input id={id} aria-label={`${label} volume`} type="range" min="0" max="100" step="1" value={Math.round(value * 100)} onChange={(event) => onChange(Number(event.currentTarget.value) / 100)} />
     <span className="time-label text-xs text-muted-foreground">{Math.round(value * 100)}%</span>
   </div>;
 }
