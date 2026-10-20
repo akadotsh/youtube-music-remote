@@ -128,18 +128,17 @@ function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
       {[
         { id: "music-volume", label: "Music volume", value: state.volume, type: "SET_VOLUME" as const },
         { id: "mac-volume", label: "Mac volume", value: state.systemVolume, type: "SET_SYSTEM_VOLUME" as const },
-      ].map((control) => (control.value !== undefined || control.type === "SET_SYSTEM_VOLUME") && (
+      ].map((control) => control.value !== undefined && (
         <div key={control.id} className="mt-7">
           <div className="flex justify-between text-xs text-muted-foreground">
             <label htmlFor={control.id}>{control.label}</label>
-            <span>{control.value === undefined ? "Unavailable" : `${Math.round(control.value * 100)}%`}</span>
+            <span>{Math.round(control.value * 100)}%</span>
           </div>
           <input id={control.id} type="range" min="0" max="100" step="1"
-            disabled={control.value === undefined}
-            value={Math.round((control.value ?? 0) * 100)}
+            value={Math.round(control.value * 100)}
             onChange={(event) => remote.send({ type: control.type, volume: Number(event.currentTarget.value) / 100 })}
             className="mt-2 w-full accent-primary" />
-          {control.type === "SET_SYSTEM_VOLUME" && <p className="mt-1 text-xs text-muted-foreground">{control.value === undefined ? "Mac volume is unavailable for this audio output" : "Changes all Mac audio"}</p>}
+          {control.type === "SET_SYSTEM_VOLUME" && <p className="mt-1 text-xs text-muted-foreground">Changes all Mac audio</p>}
         </div>
       ))}
       {remote.error && <ErrorMessage message={remote.error} dismiss={() => remote.setError("")} />}
