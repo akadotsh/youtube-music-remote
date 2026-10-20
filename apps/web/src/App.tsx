@@ -81,10 +81,10 @@ function SongSearch({ remote, onPlay }: { remote: ReturnType<typeof useRemote>; 
   return (
     <section className="py-6">
       <h2 className="text-xl font-semibold">Search songs</h2>
-      <form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); remote.search(query); }}>
+      <form className="song-search mt-4" onSubmit={(event) => { event.preventDefault(); remote.search(query); }}>
         <label className="sr-only" htmlFor="song-search">Song or artist</label>
-        <input id="song-search" type="search" enterKeyHint="search" maxLength={200} value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Song or artist" className="glass-field min-w-0 flex-1" />
-        <Button type="submit" disabled={!connected || remote.searching || !query.trim()}>Search</Button>
+        <input id="song-search" type="search" enterKeyHint="search" maxLength={200} value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Song or artist" className="min-w-0 flex-1" />
+        <Button type="submit" variant="ghost" size="icon" aria-label="Search songs" disabled={!connected || remote.searching || !query.trim()}><Search className="size-5" aria-hidden="true" /></Button>
       </form>
       <p className="mt-3 text-sm text-muted-foreground">Plays in YouTube Music on your Mac.</p>
       {!connected && <p role="status" className="mt-3 text-sm text-muted-foreground">Connect your Mac to search and play.</p>}
