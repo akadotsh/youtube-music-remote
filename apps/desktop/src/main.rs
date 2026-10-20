@@ -8,9 +8,9 @@ use gpui_kit::component::{
     slider::{Slider, SliderEvent, SliderState, SliderValue},
 };
 use gpui_kit::{
-    AnyElement, Bounds, Context, Entity, Image, ImageFormat, IntoElement, ObjectFit, Render,
-    Subscription, Task, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowOptions, application, assets, div, img, init, open_window, prelude::*, px, size,
+    AnyElement, App, Bounds, Context, Entity, Hsla, Image, ImageFormat, IntoElement, ObjectFit,
+    Render, Subscription, Task, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowOptions, application, assets, div, img, init, open_window, prelude::*, px, rgb, size,
 };
 use std::{
     sync::{
@@ -89,6 +89,7 @@ impl Player {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.observe_window_appearance(window, |_, window, cx| {
             Theme::sync_system_appearance(Some(window), cx);
+            apply_music_remote_theme(cx);
         })
         .detach();
         let progress = cx.new(|_| {
@@ -588,6 +589,46 @@ impl Player {
     }
 }
 
+fn apply_music_remote_theme(cx: &mut App) {
+    Theme::update(cx, |theme| {
+        let dark = theme.is_dark();
+        let background = color(if dark { 0x1b1d23 } else { 0xe0dbd2 });
+        let foreground = color(if dark { 0xf3efe8 } else { 0x292a2e });
+        let muted = color(if dark { 0x34353a } else { 0xd9d5ce });
+        let muted_foreground = color(if dark { 0xbcb7ae } else { 0x615e59 });
+        let primary = color(if dark { 0xefebe3 } else { 0x303238 });
+        let primary_foreground = color(if dark { 0x25272c } else { 0xfffdf8 });
+        let danger = color(if dark { 0xffa4ae } else { 0xaf2939 });
+
+        theme.colors.background = background;
+        theme.colors.foreground = foreground;
+        theme.colors.muted = muted;
+        theme.colors.muted_foreground = muted_foreground;
+        theme.colors.border = muted;
+        theme.colors.input = muted;
+        theme.colors.ring = muted_foreground;
+        theme.colors.primary = primary;
+        theme.colors.primary_hover = primary.opacity(0.88);
+        theme.colors.primary_active = primary.opacity(0.8);
+        theme.colors.primary_foreground = primary_foreground;
+        theme.colors.button_primary = primary;
+        theme.colors.button_primary_hover = primary.opacity(0.88);
+        theme.colors.button_primary_active = primary.opacity(0.8);
+        theme.colors.button_primary_foreground = primary_foreground;
+        theme.colors.button = background;
+        theme.colors.button_hover = muted;
+        theme.colors.button_active = muted_foreground.opacity(0.18);
+        theme.colors.button_foreground = foreground;
+        theme.colors.danger = danger;
+        theme.radius = px(14.);
+        theme.radius_lg = px(20.);
+    });
+}
+
+fn color(hex: u32) -> Hsla {
+    rgb(hex).into()
+}
+
 impl Drop for Player {
     fn drop(&mut self) {
         if let Some(cancelled) = &self.relay_cancel {
@@ -752,6 +793,7 @@ fn main() {
     application().with_assets(assets::Assets).run(|cx| {
         init(cx);
         Theme::sync_system_appearance(None, cx);
+        apply_music_remote_theme(cx);
         let bounds = Bounds::centered(None, size(px(460.), px(680.)), cx);
         open_window(
             WindowOptions {
@@ -760,7 +802,7 @@ fn main() {
                     title: Some("Music Remote".into()),
                     ..Default::default()
                 }),
-                window_background: WindowBackgroundAppearance::Blurred,
+                window_background: WindowBackgroundAppearance::Opaque,
                 window_min_size: Some(size(px(400.), px(560.))),
                 ..Default::default()
             },
