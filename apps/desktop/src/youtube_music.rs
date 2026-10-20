@@ -18,7 +18,7 @@ impl DesktopController {
             return Ok(None);
         };
         let state: BrowserState = serde_json::from_str(&raw)?;
-        let mut state = MediaState {
+        let state = MediaState {
             title: state.title,
             artist: non_empty(state.artist),
             album: None,
@@ -34,14 +34,6 @@ impl DesktopController {
             artwork_mime_type: None,
         };
 
-        if let Ok(Some(system)) = self.system.current_state()
-            && !state.title.is_empty()
-            && system.title == state.title
-            && system.artist == state.artist
-        {
-            state.artwork = system.artwork;
-            state.artwork_mime_type = system.artwork_mime_type;
-        }
         Ok(Some(state))
     }
 }
@@ -163,9 +155,10 @@ on run argv
   set pageScript to item 1 of argv
   tell application "Google Chrome"
     repeat with browserWindow in windows
-      repeat with browserTab in tabs of browserWindow
-        if URL of browserTab starts with "https://music.youtube.com/" then
-          return execute browserTab javascript pageScript
+      set tabURLs to URL of tabs of browserWindow
+      repeat with tabIndex from 1 to count of tabURLs
+        if item tabIndex of tabURLs starts with "https://music.youtube.com/" then
+          return execute tab tabIndex of browserWindow javascript pageScript
         end if
       end repeat
     end repeat

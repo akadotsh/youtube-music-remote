@@ -33,6 +33,7 @@ struct Track {
     duration: Option<f64>,
     position: Option<f64>,
     artwork: Option<Arc<Image>>,
+    artwork_url: Option<String>,
 }
 
 impl From<MediaState> for Track {
@@ -53,6 +54,7 @@ impl From<MediaState> for Track {
             duration: state.duration,
             position: state.position,
             artwork,
+            artwork_url: state.artwork_url,
         }
     }
 }
@@ -64,6 +66,7 @@ struct Player {
     relay_url: Entity<InputState>,
     _progress_subscription: Subscription,
     _poll: Option<Task<()>>,
+    _artwork: Option<Task<()>>,
     _relay_events: Task<()>,
     relay_events: mpsc::Sender<RelayEvent>,
     relay_cancel: Option<Arc<AtomicBool>>,
@@ -185,6 +188,7 @@ impl Player {
             relay_url,
             _progress_subscription: progress_subscription,
             _poll: poll,
+            _artwork: None,
             _relay_events: relay_event_task,
             relay_events,
             relay_cancel,
@@ -279,7 +283,40 @@ impl Player {
         self.loading = false;
         match result {
             Ok(state) => {
-                self.track = state.map(Track::from);
+                let mut track = state.map(Track::from);
+                let previous_url = self
+                    .track
+                    .as_ref()
+                    .and_then(|track| track.artwork_url.clone());
+                let next_url = track.as_ref().and_then(|track| track.artwork_url.clone());
+                if next_url.is_some() && next_url == previous_url {
+                    if let Some(track) = track.as_mut() {
+                        track.artwork = self.track.as_ref().and_then(|track| track.artwork.clone());
+                    }
+                } else {
+                    self._artwork = None;
+                    if let Some(url) = next_url {
+                        self._artwork = Some(cx.spawn(async move |this, cx| {
+                            let requested_url = url.clone();
+                            let result =
+                                cx.background_spawn(async move { load_artwork(&url) }).await;
+                            let _ = this.update(cx, |this, cx| {
+                                if let Some(track) = this.track.as_mut()
+                                    && track.artwork_url.as_deref() == Some(&requested_url)
+                                {
+                                    match result {
+                                        Ok(image) => track.artwork = Some(image),
+                                        Err(error) => {
+                                            eprintln!("Could not load song artwork: {error}")
+                                        }
+                                    }
+                                    cx.notify();
+                                }
+                            });
+                        }));
+                    }
+                }
+                self.track = track;
                 self.error = None;
             }
             Err(error) => self.error = Some(error.to_string()),
@@ -606,6 +643,29 @@ fn format_time(seconds: Option<f64>) -> String {
     }
 }
 
+fn load_artwork(url: &str) -> Result<Arc<Image>, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(10)))
+        .build()
+        .into();
+    let mut response = agent.get(url).call().map_err(|error| error.to_string())?;
+    let mime = response
+        .headers()
+        .get("Content-Type")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim)
+        .ok_or("Artwork response has no content type")?;
+    let format = ImageFormat::from_mime_type(mime).ok_or("Unsupported artwork format")?;
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(5 * 1024 * 1024)
+        .read_to_vec()
+        .map_err(|error| error.to_string())?;
+    Ok(Arc::new(Image::from_bytes(format, bytes)))
+}
+
 fn main() {
     application().with_assets(assets::Assets).run(|cx| {
         init(cx);
@@ -620,4 +680,37 @@ fn main() {
         )
         .expect("failed to open desktop window");
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    #[test]
+    fn loads_remote_artwork_and_rejects_non_image_responses() {
+        for (mime, expected_image) in [("image/png; charset=binary", true), ("text/html", false)] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = format!("http://{}/cover", listener.local_addr().unwrap());
+            let server = thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut request = [0; 2048];
+                let _ = socket.read(&mut request).unwrap();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: 4\r\nConnection: close\r\n\r\nDATA"
+                );
+                let _ = socket.write_all(response.as_bytes());
+            });
+            let result = load_artwork(&url);
+            assert_eq!(result.is_ok(), expected_image);
+            if let Ok(image) = result {
+                assert_eq!(image.bytes(), b"DATA");
+                assert!(matches!(image.format(), ImageFormat::Png));
+            }
+            server.join().unwrap();
+        }
+    }
 }
