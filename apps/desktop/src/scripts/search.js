@@ -1,10 +1,6 @@
 (() => {
   const [id, query] = SEARCH_INPUT;
-  const app = document.querySelector('ytmusic-app');
-  const manager = app?.networkManager || app?.inst?.networkManager;
-  const config = window.ytcfg;
-  const context = config?.get?.('INNERTUBE_CONTEXT');
-  if (typeof manager?.fetch !== 'function' && (!context?.client?.clientVersion || typeof window.fetch !== 'function')) return 'search-unavailable';
+  if (typeof window.fetch !== 'function') return 'search-unavailable';
   const job = { id, status: 'pending' };
   window.__ytRemoteSearch = job;
   const results = [];
@@ -30,17 +26,31 @@
     for (const value of Object.values(node)) visit(value);
   };
   let timeout;
-  const request = () => {
+  const request = async () => {
+    // AppleScript runs in an isolated world: page globals are inaccessible, but HTML is shared.
+    const config = {};
+    const readConfig = (text) => {
+      for (const match of text.matchAll(/ytcfg\.set\s*\(\s*(\{[\s\S]*?\})\s*\)\s*;?/g)) {
+        try { Object.assign(config, JSON.parse(match[1])); } catch {}
+      }
+    };
+    for (const script of document.scripts) readConfig(script.textContent || '');
+    if (!config.INNERTUBE_CONTEXT?.client?.clientVersion) {
+      const page = await window.fetch('/', { credentials: 'same-origin' });
+      if (!page.ok) throw new Error(`Could not load YouTube Music configuration (HTTP ${page.status})`);
+      readConfig(await page.text());
+    }
+    const context = config.INNERTUBE_CONTEXT;
+    if (!context?.client?.clientVersion) throw new Error('Could not read YouTube Music search configuration from the page');
     const body = {
       query,
       // YouTube Music's Songs search filter.
       params: 'EgWKAQIIAWoMEA4QChADEAQQCRAF',
     };
-    if (typeof manager?.fetch === 'function') return manager.fetch('/search', body);
-    const key = config.get('INNERTUBE_API_KEY');
+    const key = config.INNERTUBE_API_KEY;
     const headers = {
       'Content-Type': 'application/json',
-      'X-YouTube-Client-Name': String(config.get('INNERTUBE_CONTEXT_CLIENT_NAME') || 67),
+      'X-YouTube-Client-Name': String(config.INNERTUBE_CONTEXT_CLIENT_NAME || 67),
       'X-YouTube-Client-Version': context.client.clientVersion,
     };
     if (context.client.visitorData) headers['X-Goog-Visitor-Id'] = context.client.visitorData;
