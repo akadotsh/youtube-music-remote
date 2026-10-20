@@ -165,9 +165,9 @@ fn command_script(command: &MediaCommand) -> Result<String, MediaError> {
                 "Mac volume does not use Chrome".into(),
             ));
         }
-        MediaCommand::PlaySong(video_id) if valid_video_id(video_id) => format!(
-            "(() => {{ window.location.assign('https://music.youtube.com/watch?v={video_id}'); return 'ok'; }})()"
-        ),
+        MediaCommand::PlaySong(video_id) if valid_video_id(video_id) => {
+            PLAY_SONG_COMMAND.replace("VIDEO_ID", video_id)
+        }
         MediaCommand::PlaySong(_) => {
             return Err(MediaError::CommandFailed("Invalid song identifier".into()));
         }
@@ -290,6 +290,17 @@ const PLAYER_COMMAND: &str = r#"(() => {
   COMMAND;
   return 'ok';
 })()"#;
+const PLAY_SONG_COMMAND: &str = r#"(() => {
+  const app = document.querySelector('ytmusic-app');
+  if (!app || !document.querySelector('ytmusic-player-bar')) return 'missing';
+  // Shared DOM events reach the page from Chrome's AppleScript isolated world, without unloading it.
+  app.dispatchEvent(new CustomEvent('yt-navigate', {
+    detail: { endpoint: { watchEndpoint: { videoId: 'VIDEO_ID' } } },
+    bubbles: true,
+    composed: true
+  }));
+  return 'ok';
+})()"#;
 const VOLUME_COMMAND: &str = r#"(() => {
   const bar = document.querySelector('ytmusic-player-bar');
   const player = document.querySelector('#movie_player');
@@ -314,13 +325,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn song_selection_only_opens_valid_music_video_ids() {
+    fn song_selection_uses_in_page_navigation_for_valid_music_video_ids() {
         let script = command_script(&MediaCommand::PlaySong("aB1_-Cd2Ef3".into())).unwrap();
-        assert!(
-            script.contains(
-                "window.location.assign('https://music.youtube.com/watch?v=aB1_-Cd2Ef3')"
-            )
-        );
+        assert!(script.contains("watchEndpoint: { videoId: 'aB1_-Cd2Ef3' }"));
+        assert!(script.contains("'yt-navigate'"));
+        assert!(!script.contains("location"));
         for id in ["short", "a';alert(1)", "https://example.com"] {
             assert!(command_script(&MediaCommand::PlaySong(id.into())).is_err());
         }
