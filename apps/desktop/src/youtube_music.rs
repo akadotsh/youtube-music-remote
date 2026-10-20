@@ -26,6 +26,9 @@ impl DesktopController {
             is_playing: state.is_playing,
             duration: valid_time(state.duration),
             position: valid_time(state.position),
+            volume: state
+                .volume
+                .filter(|value| value.is_finite() && (0. ..=1.).contains(value)),
             artwork: None,
             artwork_url: state.artwork.and_then(|value| artwork_url(&value)),
             artwork_mime_type: None,
@@ -91,6 +94,17 @@ fn command_script(command: &MediaCommand) -> Result<String, MediaError> {
                 &format!("video.currentTime = Math.min({position}, video.duration || {position})"),
             ),
         MediaCommand::Seek(_) => return Err(MediaError::InvalidSeek),
+        MediaCommand::SetVolume(volume) if volume.is_finite() && (0. ..=1.).contains(volume) => {
+            PLAYER_COMMAND.replace(
+                "COMMAND",
+                &format!("video.volume = {volume}; video.muted = false"),
+            )
+        }
+        MediaCommand::SetVolume(_) => {
+            return Err(MediaError::CommandFailed(
+                "Volume must be between 0 and 1".into(),
+            ));
+        }
         MediaCommand::Next => BUTTON_COMMAND.replace("SELECTORS", NEXT_SELECTORS),
         MediaCommand::Previous => BUTTON_COMMAND.replace("SELECTORS", PREVIOUS_SELECTORS),
     })
@@ -138,6 +152,8 @@ struct BrowserState {
     is_playing: bool,
     duration: Option<f64>,
     position: Option<f64>,
+    #[serde(default)]
+    volume: Option<f64>,
 }
 
 const NO_TAB: &str = "__YT_REMOTE_NO_TAB__";
@@ -167,6 +183,7 @@ const READ_STATE: &str = r#"(() => {
     artist: text(['ytmusic-player-bar .byline', '.content-info-wrapper .byline']),
     artwork: cover?.currentSrc || cover?.src || null,
     isPlaying: Boolean(video && !video.paused && !video.ended),
+    volume: video ? (video.muted ? 0 : video.volume) : null,
     duration: Number.isFinite(video?.duration) ? video.duration : null,
     position: Number.isFinite(video?.currentTime) ? video.currentTime : null
   });
@@ -221,13 +238,25 @@ mod tests {
     }
 
     #[test]
+    fn builds_tab_volume_commands_and_rejects_invalid_levels() {
+        for volume in [0., 0.5, 1.] {
+            let script = command_script(&MediaCommand::SetVolume(volume)).unwrap();
+            assert!(script.contains(&format!("video.volume = {volume}; video.muted = false")));
+        }
+        for volume in [-0.1, 1.1, f64::NAN, f64::INFINITY] {
+            assert!(command_script(&MediaCommand::SetVolume(volume)).is_err());
+        }
+    }
+
+    #[test]
     fn parses_browser_state() {
         let state: BrowserState = serde_json::from_str(
-            r#"{"title":"Song","artist":"Artist","artwork":"https://lh3.googleusercontent.com/cover","isPlaying":true,"duration":120,"position":10}"#,
+            r#"{"title":"Song","artist":"Artist","artwork":"https://lh3.googleusercontent.com/cover","isPlaying":true,"duration":120,"position":10,"volume":0.5}"#,
         )
         .unwrap();
         assert_eq!(state.title, "Song");
         assert_eq!(state.position, Some(10.));
+        assert_eq!(state.volume, Some(0.5));
         assert_eq!(
             state.artwork.as_deref(),
             Some("https://lh3.googleusercontent.com/cover")

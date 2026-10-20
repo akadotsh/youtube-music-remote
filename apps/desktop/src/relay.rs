@@ -231,6 +231,12 @@ fn execute(controller: &dyn MediaController, command: RelayCommand) -> RelayResu
             Ok(controller.send(MediaCommand::Seek(position))?)
         }
         RelayCommand::Seek { .. } => Err("invalid seek position".into()),
+        RelayCommand::SetVolume { volume }
+            if volume.is_finite() && (0. ..=1.).contains(&volume) =>
+        {
+            Ok(controller.send(MediaCommand::SetVolume(volume))?)
+        }
+        RelayCommand::SetVolume { .. } => Err("volume must be between 0 and 1".into()),
     }
 }
 
@@ -329,6 +335,7 @@ enum RelayCommand {
     Next,
     Previous,
     Seek { position: f64 },
+    SetVolume { volume: f64 },
     GetState,
 }
 
@@ -361,6 +368,8 @@ struct PlayerState {
     position: f64,
     is_playing: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    volume: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<String>,
     capabilities: Capabilities,
 }
@@ -375,6 +384,7 @@ impl From<Option<MediaState>> for PlayerState {
                 duration: 0.,
                 position: 0.,
                 is_playing: false,
+                volume: None,
                 source: None,
                 capabilities: Capabilities::default(),
             };
@@ -395,6 +405,9 @@ impl From<Option<MediaState>> for PlayerState {
             duration: valid_time(state.duration),
             position: valid_time(state.position),
             is_playing: state.is_playing,
+            volume: state
+                .volume
+                .filter(|value| value.is_finite() && (0. ..=1.).contains(value)),
             source: Some(state.source),
             capabilities: Capabilities::default(),
         }
@@ -433,8 +446,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn acknowledges_pause_without_reading_media_state() {
-        struct Controller;
+    fn acknowledges_commands_without_reading_media_state() {
+        struct Controller(MediaCommand);
         impl MediaController for Controller {
             fn check_compatibility(&self) -> Result<(), crate::MediaError> {
                 Ok(())
@@ -443,7 +456,7 @@ mod tests {
                 panic!("state polling must not block commands");
             }
             fn send(&self, command: MediaCommand) -> Result<(), crate::MediaError> {
-                assert_eq!(command, MediaCommand::Pause);
+                assert_eq!(command, self.0);
                 Ok(())
             }
         }
@@ -463,7 +476,7 @@ mod tests {
         let (events, _) = mpsc::channel();
         handle_message(
             &mut socket,
-            &Controller,
+            &Controller(MediaCommand::Pause),
             r#"{"type":"COMMAND","requestId":"pause-1","command":{"type":"PAUSE"}}"#,
             &events,
             "",
@@ -473,6 +486,31 @@ mod tests {
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
         assert_eq!(response["type"], "ACK");
         assert_eq!(response["requestId"], "pause-1");
+        handle_message(
+            &mut socket,
+            &Controller(MediaCommand::SetVolume(0.4)),
+            r#"{"type":"COMMAND","requestId":"volume-1","command":{"type":"SET_VOLUME","volume":0.4}}"#,
+            &events,
+            "",
+        ).unwrap();
+        let response = client.read().unwrap().into_text().unwrap();
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["type"], "ACK");
+        assert_eq!(response["requestId"], "volume-1");
+        for volume in [-0.1, 1.1] {
+            let raw = serde_json::json!({ "type": "COMMAND", "requestId": "invalid-volume", "command": { "type": "SET_VOLUME", "volume": volume } }).to_string();
+            handle_message(
+                &mut socket,
+                &Controller(MediaCommand::Pause),
+                &raw,
+                &events,
+                "",
+            )
+            .unwrap();
+            let response = client.read().unwrap().into_text().unwrap();
+            let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+            assert_eq!(response["type"], "ERROR");
+        }
     }
 
     #[test]
@@ -511,6 +549,7 @@ mod tests {
             is_playing: true,
             duration: None,
             position: None,
+            volume: Some(0.5),
             artwork: None,
             artwork_url: Some("https://lh3.googleusercontent.com/cover".into()),
             artwork_mime_type: None,
@@ -519,6 +558,7 @@ mod tests {
             state.artwork.as_deref(),
             Some("https://lh3.googleusercontent.com/cover")
         );
+        assert_eq!(state.volume, Some(0.5));
     }
 
     #[test]
@@ -530,5 +570,6 @@ mod tests {
         assert_eq!(value["state"]["capabilities"]["seek"], true);
         assert!(value["state"].get("artwork").is_none());
         assert!(value["state"].get("source").is_none());
+        assert!(value["state"].get("volume").is_none());
     }
 }

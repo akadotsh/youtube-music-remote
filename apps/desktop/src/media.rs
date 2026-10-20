@@ -11,6 +11,7 @@ pub struct MediaState {
     pub is_playing: bool,
     pub duration: Option<f64>,
     pub position: Option<f64>,
+    pub volume: Option<f64>,
     pub artwork: Option<Vec<u8>>,
     pub artwork_url: Option<String>,
     pub artwork_mime_type: Option<String>,
@@ -23,6 +24,7 @@ pub enum MediaCommand {
     Next,
     Previous,
     Seek(f64),
+    SetVolume(f64),
 }
 
 pub trait MediaController {
@@ -116,6 +118,9 @@ impl MediaRemoteAdapter {
                 ])
             }
             MediaCommand::Seek(_) => Err(MediaError::InvalidSeek),
+            MediaCommand::SetVolume(_) => Err(MediaError::CommandFailed(
+                "Volume control requires an open YouTube Music tab".into(),
+            )),
         }
     }
 }
@@ -142,6 +147,7 @@ impl MediaController for MediaRemoteAdapter {
             is_playing: payload.playing,
             duration: payload.duration,
             position: payload.elapsed_time_now.or(payload.elapsed_time),
+            volume: None,
             artwork: payload
                 .artwork_data
                 .and_then(|value| STANDARD.decode(value).ok()),

@@ -1,6 +1,6 @@
 import type { DeviceCredential, PlayerState } from "@yt-remote/protocol";
 import { Pause, Play, RotateCcw, SkipBack, SkipForward, Unplug, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./components/ui/button";
 import { type SavedConnection, useRemote } from "./useRemote";
 
@@ -73,6 +73,8 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
 function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
   const state = remote.state ?? emptyState;
   const [seek, setSeek] = useState<number>();
+  const [volume, setVolume] = useState<number>();
+  useEffect(() => setVolume(undefined), [state.volume, remote.error]);
   const shownPosition = seek ?? state.position;
 
   return (
@@ -90,6 +92,21 @@ function Player({ remote }: { remote: ReturnType<typeof useRemote> }) {
         <Button size="largeIcon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-8 fill-current" /> : <Play className="ml-1 size-8 fill-current" />}</Button>
         <Button variant="ghost" size="icon" aria-label="Next track" onClick={() => remote.send({ type: "NEXT" })}><SkipForward className="size-7 fill-current" /></Button>
       </div>
+      {state.volume !== undefined && (
+        <div className="mt-7">
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <label htmlFor="music-volume">Music volume</label>
+            <span>{Math.round((volume ?? state.volume) * 100)}%</span>
+          </div>
+          <input id="music-volume" type="range" min="0" max="100" step="1"
+            value={Math.round((volume ?? state.volume) * 100)}
+            onChange={(event) => setVolume(Number(event.currentTarget.value) / 100)}
+            onPointerUp={(event) => remote.send({ type: "SET_VOLUME", volume: Number(event.currentTarget.value) / 100 })}
+            onKeyUp={(event) => { if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) remote.send({ type: "SET_VOLUME", volume: Number(event.currentTarget.value) / 100 }); }}
+            onPointerCancel={() => setVolume(undefined)}
+            className="mt-2 w-full accent-primary" />
+        </div>
+      )}
       {remote.error && <ErrorMessage message={remote.error} dismiss={() => remote.setError("")} />}
     </div>
   );

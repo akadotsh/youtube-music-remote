@@ -17,6 +17,7 @@ export type Command =
   | { type: "NEXT" }
   | { type: "PREVIOUS" }
   | { type: "SEEK"; position: number }
+  | { type: "SET_VOLUME"; volume: number }
   | { type: "GET_STATE" };
 
 export type PlayerState = {
@@ -26,6 +27,7 @@ export type PlayerState = {
   duration: number;
   position: number;
   isPlaying: boolean;
+  volume?: number;
   source?: string;
   capabilities?: PlayerCapabilities;
 };
@@ -53,6 +55,7 @@ const commandTypes = new Set([
   "NEXT",
   "PREVIOUS",
   "SEEK",
+  "SET_VOLUME",
   "GET_STATE",
 ]);
 
@@ -107,6 +110,7 @@ function isCommand(value: unknown): value is Command {
   }
 
   if (value.type === "SEEK") return isFiniteNonNegative(value.position);
+  if (value.type === "SET_VOLUME") return isVolume(value.volume);
   return true;
 }
 
@@ -119,6 +123,7 @@ function isPlayerState(value: unknown): value is PlayerState {
     isFiniteNonNegative(value.duration) &&
     isFiniteNonNegative(value.position) &&
     typeof value.isPlaying === "boolean" &&
+    (value.volume === undefined || isVolume(value.volume)) &&
     (value.source === undefined || typeof value.source === "string") &&
     (value.capabilities === undefined || isPlayerCapabilities(value.capabilities))
   );
@@ -136,6 +141,10 @@ function isPlayerCapabilities(value: unknown): value is PlayerCapabilities {
 
 function isFiniteNonNegative(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isVolume(value: unknown): value is number {
+  return isFiniteNonNegative(value) && value <= 1;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
