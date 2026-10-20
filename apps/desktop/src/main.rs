@@ -8,8 +8,8 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     AnyElement, Bounds, Context, Entity, Image, ImageFormat, IntoElement, ObjectFit, Render,
-    Subscription, Task, Window, WindowBounds, WindowOptions, application, assets, div, img, init,
-    open_window, prelude::*, px, size,
+    Subscription, Task, Window, WindowBackgroundAppearance, WindowBounds, WindowOptions,
+    application, assets, div, img, init, open_window, prelude::*, px, size,
 };
 use std::{
     sync::{
@@ -359,10 +359,10 @@ impl Player {
 
     fn render_artwork(&self, cx: &mut Context<Self>) -> AnyElement {
         let frame = div()
-            .size(px(320.))
+            .size(px(240.))
             .flex_none()
             .overflow_hidden()
-            .rounded_xl()
+            .rounded_2xl()
             .bg(cx.theme().tokens.muted);
 
         match self.track.as_ref().and_then(|track| track.artwork.clone()) {
@@ -397,7 +397,13 @@ impl Player {
             .flex()
             .flex_col()
             .items_center()
-            .gap_6()
+            .gap_4()
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("NOW PLAYING"),
+            )
             .child(self.render_artwork(cx))
             .child(
                 div()
@@ -505,15 +511,17 @@ impl Player {
             .flex()
             .flex_col()
             .gap_3()
-            .p_4()
-            .rounded_xl()
-            .bg(cx.theme().tokens.muted)
-            .child(div().text_base().font_semibold().child("Phone pairing"))
+            .p_5()
+            .rounded_2xl()
+            .border_1()
+            .border_color(cx.theme().border.opacity(0.5))
+            .bg(cx.theme().tokens.muted.opacity(0.6))
+            .child(div().text_base().font_semibold().child("Connect your phone"))
             .child(
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("Deploy the relay, paste its URL here, then create a code for the phone PWA."),
+                    .child("Enter your deployed relay URL. Create a code, then enter it in Music Remote on your phone."),
             )
             .child(Input::new(&self.relay_url).id("relay-url").w_full())
             .child(
@@ -573,10 +581,10 @@ impl Render for Player {
             .flex()
             .flex_col()
             .items_center()
-            .gap_8()
-            .bg(cx.theme().tokens.background)
+            .gap_6()
+            .bg(cx.theme().tokens.background.opacity(0.82))
             .text_color(cx.theme().foreground)
-            .p_8()
+            .p_6()
             .child(if self.track.is_some() {
                 self.render_player(cx)
             } else {
@@ -590,7 +598,7 @@ impl Render for Player {
                     .child(if self.loading {
                         "Looking for currently playing media…".to_string()
                     } else {
-                        "Play something on this Mac".to_string()
+                        "Open YouTube Music in Chrome to get started".to_string()
                     })
                     .when_some(self.error.clone(), |this, error| {
                         this.child(
@@ -673,6 +681,8 @@ fn main() {
         open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                window_background: WindowBackgroundAppearance::Blurred,
+                window_min_size: Some(size(px(420.), px(600.))),
                 ..Default::default()
             },
             cx,
