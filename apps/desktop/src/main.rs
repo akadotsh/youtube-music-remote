@@ -76,6 +76,7 @@ struct Player {
     command_pending: bool,
     error: Option<String>,
     pairing: bool,
+    pairing_open: bool,
     pairing_code: Option<String>,
     relay_status: String,
     relay_error: Option<String>,
@@ -198,6 +199,7 @@ impl Player {
             command_pending: false,
             error,
             pairing: false,
+            pairing_open: false,
             pairing_code: None,
             relay_status: if relay_configured {
                 "Connecting to relay…".into()
@@ -585,11 +587,49 @@ impl Render for Player {
             .bg(cx.theme().tokens.background.opacity(0.82))
             .text_color(cx.theme().foreground)
             .p_6()
-            .child(if self.track.is_some() {
+            .child(
+                div()
+                    .w_full()
+                    .max_w(px(380.))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().text_sm().font_semibold().child("Music Remote"))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(self.relay_status.clone()),
+                            ),
+                    )
+                    .child(
+                        Button::new("toggle-pairing")
+                            .ghost()
+                            .label(if self.pairing_open {
+                                "Back to player"
+                            } else {
+                                "Connect phone"
+                            })
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.pairing_open = !this.pairing_open;
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(if self.pairing_open {
+                self.render_pairing(cx)
+            } else if self.track.is_some() {
                 self.render_player(cx)
             } else {
                 div()
-                    .size_full()
+                    .w_full()
+                    .min_h(px(300.))
                     .flex()
                     .flex_col()
                     .items_center()
@@ -612,7 +652,6 @@ impl Render for Player {
                     })
                     .into_any_element()
             })
-            .child(self.render_pairing(cx))
     }
 }
 
