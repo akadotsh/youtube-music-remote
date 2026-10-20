@@ -1,12 +1,67 @@
-use crate::{MediaCommand, MediaController, MediaError, MediaRemoteAdapter, MediaState};
+use crate::{
+    MediaCommand, MediaController, MediaError, MediaRemoteAdapter, MediaState, SearchResult,
+};
 use serde::Deserialize;
-use std::process::Command;
+use std::{
+    process::Command,
+    sync::atomic::{AtomicU64, Ordering},
+    thread,
+    time::{Duration, Instant},
+};
 
 pub struct DesktopController {
     system: MediaRemoteAdapter,
 }
 
 impl DesktopController {
+    pub fn search(query: &str) -> Result<Vec<SearchResult>, MediaError> {
+        if query.trim().is_empty() || query.encode_utf16().count() > 200 {
+            return Err(MediaError::CommandFailed(
+                "Enter a search of 1–200 characters".into(),
+            ));
+        }
+        static NEXT_SEARCH: AtomicU64 = AtomicU64::new(1);
+        let id = NEXT_SEARCH.fetch_add(1, Ordering::Relaxed);
+        let input = serde_json::to_string(&(id, query.trim()))?;
+        let script = include_str!("scripts/search.js").replace("SEARCH_INPUT", &input);
+        if run_in_youtube_music(&script)?.as_deref() != Some("ok") {
+            return Err(MediaError::CommandFailed(
+                "Open and load YouTube Music in Chrome before searching".into(),
+            ));
+        }
+        let poll = format!(
+            "JSON.stringify(window.__ytRemoteSearch?.id === {id} ? window.__ytRemoteSearch : {{status:'error',message:'Search was interrupted'}})"
+        );
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < deadline {
+            let raw = run_in_youtube_music(&poll)?
+                .ok_or_else(|| MediaError::CommandFailed("YouTube Music tab was closed".into()))?;
+            let job: SearchJob = serde_json::from_str(&raw)?;
+            match job.status.as_str() {
+                "done" => {
+                    let results = job.results.ok_or_else(|| {
+                        MediaError::CommandFailed("Search response is missing results".into())
+                    })?;
+                    if results.len() > 25 || !results.iter().all(valid_search_result) {
+                        return Err(MediaError::CommandFailed(
+                            "YouTube Music returned invalid search results".into(),
+                        ));
+                    }
+                    return Ok(results);
+                }
+                "pending" => thread::sleep(Duration::from_millis(250)),
+                _ => {
+                    return Err(MediaError::CommandFailed(
+                        job.message.unwrap_or_else(|| "Search failed".into()),
+                    ));
+                }
+            }
+        }
+        Err(MediaError::CommandFailed(
+            "Search timed out. Try again.".into(),
+        ))
+    }
+
     pub fn new() -> Result<Self, MediaError> {
         Ok(Self {
             system: MediaRemoteAdapter::new()?,
@@ -102,9 +157,41 @@ fn command_script(command: &MediaCommand) -> Result<String, MediaError> {
                 "Mac volume does not use Chrome".into(),
             ));
         }
+        MediaCommand::PlaySong(video_id) if valid_video_id(video_id) => format!(
+            "(() => {{ window.location.assign('https://music.youtube.com/watch?v={video_id}'); return 'ok'; }})()"
+        ),
+        MediaCommand::PlaySong(_) => {
+            return Err(MediaError::CommandFailed("Invalid song identifier".into()));
+        }
         MediaCommand::Next => BUTTON_COMMAND.replace("SELECTORS", NEXT_SELECTORS),
         MediaCommand::Previous => BUTTON_COMMAND.replace("SELECTORS", PREVIOUS_SELECTORS),
     })
+}
+
+pub(crate) fn valid_video_id(value: &str) -> bool {
+    value.len() == 11
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+fn valid_search_result(result: &SearchResult) -> bool {
+    valid_video_id(&result.video_id)
+        && !result.title.trim().is_empty()
+        && result.title.encode_utf16().count() <= 500
+        && result.artist.encode_utf16().count() <= 500
+        && result.artwork.as_ref().is_none_or(|url| {
+            url.len() <= 2048
+                && url::Url::parse(url)
+                    .is_ok_and(|url| url.scheme() == "https" && url.host_str().is_some())
+        })
+}
+
+#[derive(Deserialize)]
+struct SearchJob {
+    status: String,
+    results: Option<Vec<SearchResult>>,
+    message: Option<String>,
 }
 
 fn chrome_setup_error(error: MediaError) -> MediaError {
@@ -217,6 +304,36 @@ const PREVIOUS_SELECTORS: &str =
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn song_selection_only_opens_valid_music_video_ids() {
+        let script = command_script(&MediaCommand::PlaySong("aB1_-Cd2Ef3".into())).unwrap();
+        assert!(
+            script.contains(
+                "window.location.assign('https://music.youtube.com/watch?v=aB1_-Cd2Ef3')"
+            )
+        );
+        for id in ["short", "a';alert(1)", "https://example.com"] {
+            assert!(command_script(&MediaCommand::PlaySong(id.into())).is_err());
+        }
+    }
+
+    #[test]
+    fn validates_search_result_metadata() {
+        let mut result = SearchResult {
+            video_id: "aB1_-Cd2Ef3".into(),
+            title: "Song".into(),
+            artist: "Artist".into(),
+            artwork: None,
+        };
+        assert!(valid_search_result(&result));
+        result.artwork = Some("javascript:alert(1)".into());
+        assert!(!valid_search_result(&result));
+        result.artwork = Some("https://example.com/cover".into());
+        assert!(valid_search_result(&result));
+        result.title = "🎵".repeat(251);
+        assert!(!valid_search_result(&result));
+    }
 
     #[test]
     fn requests_large_google_cover_only_for_google_hosts() {

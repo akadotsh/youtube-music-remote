@@ -26,6 +26,17 @@ pub enum MediaCommand {
     Seek(f64),
     SetVolume(f64),
     SetSystemVolume(f64),
+    PlaySong(String),
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    pub video_id: String,
+    pub title: String,
+    pub artist: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artwork: Option<String>,
 }
 
 pub trait MediaController {
@@ -124,6 +135,9 @@ impl MediaRemoteAdapter {
             )),
             MediaCommand::SetSystemVolume(_) => Err(MediaError::CommandFailed(
                 "Mac volume must be controlled through the desktop controller".into(),
+            )),
+            MediaCommand::PlaySong(_) => Err(MediaError::CommandFailed(
+                "Song selection requires an open YouTube Music tab".into(),
             )),
         }
     }

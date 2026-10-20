@@ -19,6 +19,8 @@ export type Command =
   | { type: "SEEK"; position: number }
   | { type: "SET_VOLUME"; volume: number }
   | { type: "SET_SYSTEM_VOLUME"; volume: number }
+  | { type: "SEARCH"; query: string }
+  | { type: "PLAY_SONG"; videoId: string }
   | { type: "GET_STATE" };
 
 export type PlayerState = {
@@ -45,11 +47,19 @@ export type ClientMessage =
   | { type: "COMMAND"; requestId: string; command: Command }
   | { type: "STATE"; state: PlayerState }
   | { type: "ACK"; requestId: string }
+  | { type: "SEARCH_RESULTS"; requestId: string; results: SearchResult[] }
   | { type: "ERROR"; requestId?: string; message: string };
 
 export type ServerMessage =
   | ClientMessage
   | { type: "PEER_STATUS"; connected: boolean };
+
+export type SearchResult = {
+  videoId: string;
+  title: string;
+  artist: string;
+  artwork?: string;
+};
 
 const commandTypes = new Set([
   "PLAY",
@@ -59,6 +69,8 @@ const commandTypes = new Set([
   "SEEK",
   "SET_VOLUME",
   "SET_SYSTEM_VOLUME",
+  "SEARCH",
+  "PLAY_SONG",
   "GET_STATE",
 ]);
 
@@ -72,6 +84,9 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return isPlayerState(value.state);
     case "ACK":
       return typeof value.requestId === "string";
+    case "SEARCH_RESULTS":
+      return typeof value.requestId === "string" && Array.isArray(value.results) &&
+        value.results.length <= 25 && value.results.every(isSearchResult);
     case "ERROR":
       return (
         (value.requestId === undefined || typeof value.requestId === "string") &&
@@ -114,6 +129,8 @@ function isCommand(value: unknown): value is Command {
 
   if (value.type === "SEEK") return isFiniteNonNegative(value.position);
   if (value.type === "SET_VOLUME" || value.type === "SET_SYSTEM_VOLUME") return isVolume(value.volume);
+  if (value.type === "SEARCH") return typeof value.query === "string" && value.query.trim().length > 0 && value.query.length <= 200;
+  if (value.type === "PLAY_SONG") return isVideoId(value.videoId);
   return true;
 }
 
@@ -149,6 +166,21 @@ function isFiniteNonNegative(value: unknown): value is number {
 
 function isVolume(value: unknown): value is number {
   return isFiniteNonNegative(value) && value <= 1;
+}
+
+function isVideoId(value: unknown): value is string {
+  return typeof value === "string" && /^[a-zA-Z0-9_-]{11}$/.test(value);
+}
+
+function isSearchResult(value: unknown): value is SearchResult {
+  return isRecord(value) && isVideoId(value.videoId) &&
+    typeof value.title === "string" && value.title.length > 0 && value.title.length <= 500 &&
+    typeof value.artist === "string" && value.artist.length <= 500 &&
+    (value.artwork === undefined || (typeof value.artwork === "string" && value.artwork.length <= 2048 && isHttpsUrl(value.artwork)));
+}
+
+function isHttpsUrl(value: string): boolean {
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

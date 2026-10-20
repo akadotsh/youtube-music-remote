@@ -3,7 +3,9 @@ mod relay;
 mod system_volume;
 mod youtube_music;
 
-pub use media::{MediaCommand, MediaController, MediaError, MediaRemoteAdapter, MediaState};
+pub use media::{
+    MediaCommand, MediaController, MediaError, MediaRemoteAdapter, MediaState, SearchResult,
+};
 pub use relay::{
     RelayEvent, RelayStatus, SavedConnection, load_connection, pair, run_relay, save_connection,
 };

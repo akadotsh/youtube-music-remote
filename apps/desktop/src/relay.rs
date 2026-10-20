@@ -1,4 +1,4 @@
-use crate::{DesktopController, MediaCommand, MediaController, MediaState};
+use crate::{DesktopController, MediaCommand, MediaController, MediaState, SearchResult};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,7 +12,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, Sender, SyncSender},
     },
     thread,
     time::{Duration, Instant},
@@ -155,8 +155,12 @@ fn connect_once(
     let mut socket = connect(websocket_url(connection)?.as_str())?.0;
     set_read_timeout(&mut socket, Some(Duration::from_millis(250)))?;
     let mut last_state = String::new();
+    let searches = SearchWorker::new();
 
     while !cancelled.load(Ordering::Relaxed) {
+        if let Ok(message) = searches.responses.try_recv() {
+            socket.send(Message::Text(message.into()))?;
+        }
         if let Ok(message) = states.try_recv()
             && message != last_state
         {
@@ -166,7 +170,14 @@ fn connect_once(
 
         match socket.read() {
             Ok(Message::Text(text)) => {
-                handle_message(&mut socket, controller, &text, events, &last_state)?;
+                handle_message(
+                    &mut socket,
+                    controller,
+                    &text,
+                    events,
+                    &last_state,
+                    &searches,
+                )?;
                 poller.unpark();
             }
             Ok(Message::Close(_)) => return Ok(()),
@@ -186,6 +197,7 @@ fn handle_message(
     raw: &str,
     events: &Sender<RelayEvent>,
     last_state: &str,
+    searches: &SearchWorker,
 ) -> RelayResult<()> {
     match serde_json::from_str::<RelayMessage>(raw)? {
         RelayMessage::PeerStatus { connected } => {
@@ -199,6 +211,16 @@ fn handle_message(
             request_id,
             command,
         } => {
+            if let RelayCommand::Search { query } = command {
+                if let Err(error) = searches.start(request_id.clone(), query) {
+                    let message = DesktopMessage::Error {
+                        request_id: &request_id,
+                        message: error.to_string(),
+                    };
+                    socket.send(Message::Text(serde_json::to_string(&message)?.into()))?;
+                }
+                return Ok(());
+            }
             let get_state = matches!(command, RelayCommand::GetState);
             let result = execute(controller, command);
             let response = match &result {
@@ -218,6 +240,51 @@ fn handle_message(
         RelayMessage::Error { message } => events.send(RelayEvent::Error(message))?,
     }
     Ok(())
+}
+
+struct SearchWorker {
+    responses: Receiver<String>,
+    sender: SyncSender<String>,
+    busy: Arc<AtomicBool>,
+}
+
+impl SearchWorker {
+    fn new() -> Self {
+        let (sender, responses) = mpsc::sync_channel(1);
+        Self {
+            responses,
+            sender,
+            busy: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn start(&self, request_id: String, query: String) -> RelayResult<()> {
+        if query.trim().is_empty() || query.encode_utf16().count() > 200 {
+            return Err("Enter a search of 1–200 characters".into());
+        }
+        if self.busy.swap(true, Ordering::Relaxed) {
+            return Err("A search is already running. Please wait.".into());
+        }
+        let sender = self.sender.clone();
+        let busy = self.busy.clone();
+        thread::spawn(move || {
+            let response = match DesktopController::search(&query) {
+                Ok(results) => DesktopMessage::SearchResults {
+                    request_id: &request_id,
+                    results,
+                },
+                Err(error) => DesktopMessage::Error {
+                    request_id: &request_id,
+                    message: error.to_string(),
+                },
+            };
+            if let Ok(message) = serde_json::to_string(&response) {
+                let _ = sender.send(message);
+            }
+            busy.store(false, Ordering::Relaxed);
+        });
+        Ok(())
+    }
 }
 
 fn execute(controller: &dyn MediaController, command: RelayCommand) -> RelayResult<()> {
@@ -243,6 +310,11 @@ fn execute(controller: &dyn MediaController, command: RelayCommand) -> RelayResu
             Ok(controller.send(MediaCommand::SetSystemVolume(volume))?)
         }
         RelayCommand::SetSystemVolume { .. } => Err("Mac volume must be between 0 and 1".into()),
+        RelayCommand::PlaySong { video_id } if crate::youtube_music::valid_video_id(&video_id) => {
+            Ok(controller.send(MediaCommand::PlaySong(video_id))?)
+        }
+        RelayCommand::PlaySong { .. } => Err("Invalid song identifier".into()),
+        RelayCommand::Search { .. } => Err("Search must run on the search worker".into()),
     }
 }
 
@@ -340,15 +412,34 @@ enum RelayCommand {
     Pause,
     Next,
     Previous,
-    Seek { position: f64 },
-    SetVolume { volume: f64 },
-    SetSystemVolume { volume: f64 },
+    Seek {
+        position: f64,
+    },
+    SetVolume {
+        volume: f64,
+    },
+    SetSystemVolume {
+        volume: f64,
+    },
+    Search {
+        query: String,
+    },
+    PlaySong {
+        #[serde(rename = "videoId")]
+        video_id: String,
+    },
     GetState,
 }
 
 #[derive(Serialize)]
 #[serde(tag = "type")]
 enum DesktopMessage<'a> {
+    #[serde(rename = "SEARCH_RESULTS")]
+    SearchResults {
+        #[serde(rename = "requestId")]
+        request_id: &'a str,
+        results: Vec<SearchResult>,
+    },
     #[serde(rename = "ACK")]
     Ack {
         #[serde(rename = "requestId")]
@@ -457,6 +548,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rejects_invalid_and_overlapping_searches_without_opening_chrome() {
+        let searches = SearchWorker::new();
+        for query in ["", "  ", &"x".repeat(201)] {
+            assert!(searches.start("search".into(), query.into()).is_err());
+            assert!(!searches.busy.load(Ordering::Relaxed));
+        }
+        searches.busy.store(true, Ordering::Relaxed);
+        assert!(searches.start("search".into(), "Song".into()).is_err());
+    }
+
+    #[test]
     fn acknowledges_commands_without_reading_media_state() {
         struct Controller(MediaCommand);
         impl MediaController for Controller {
@@ -485,12 +587,15 @@ mod tests {
         let mut client =
             WebSocket::from_raw_socket(client, tungstenite::protocol::Role::Client, None);
         let (events, _) = mpsc::channel();
+        let searches = SearchWorker::new();
+        searches.busy.store(true, Ordering::Relaxed);
         handle_message(
             &mut socket,
             &Controller(MediaCommand::Pause),
             r#"{"type":"COMMAND","requestId":"pause-1","command":{"type":"PAUSE"}}"#,
             &events,
             "",
+            &searches,
         )
         .unwrap();
         let response = client.read().unwrap().into_text().unwrap();
@@ -503,6 +608,7 @@ mod tests {
             r#"{"type":"COMMAND","requestId":"volume-1","command":{"type":"SET_VOLUME","volume":0.4}}"#,
             &events,
             "",
+            &searches,
         ).unwrap();
         let response = client.read().unwrap().into_text().unwrap();
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
@@ -514,11 +620,30 @@ mod tests {
             r#"{"type":"COMMAND","requestId":"system-1","command":{"type":"SET_SYSTEM_VOLUME","volume":0.6}}"#,
             &events,
             "",
+            &searches,
         ).unwrap();
         let response = client.read().unwrap().into_text().unwrap();
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
         assert_eq!(response["type"], "ACK");
         assert_eq!(response["requestId"], "system-1");
+        handle_message(
+            &mut socket, &Controller(MediaCommand::PlaySong("aB1_-Cd2Ef3".into())),
+            r#"{"type":"COMMAND","requestId":"song-1","command":{"type":"PLAY_SONG","videoId":"aB1_-Cd2Ef3"}}"#,
+            &events, "", &searches,
+        ).unwrap();
+        let response = client.read().unwrap().into_text().unwrap();
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["type"], "ACK");
+        assert_eq!(response["requestId"], "song-1");
+        handle_message(
+            &mut socket, &Controller(MediaCommand::Pause),
+            r#"{"type":"COMMAND","requestId":"search-busy","command":{"type":"SEARCH","query":"Song"}}"#,
+            &events, "", &searches,
+        ).unwrap();
+        let response = client.read().unwrap().into_text().unwrap();
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["type"], "ERROR");
+        assert_eq!(response["requestId"], "search-busy");
         for volume in [-0.1, 1.1] {
             for command_type in ["SET_VOLUME", "SET_SYSTEM_VOLUME"] {
                 let raw = serde_json::json!({ "type": "COMMAND", "requestId": "invalid-volume", "command": { "type": command_type, "volume": volume } }).to_string();
@@ -528,6 +653,7 @@ mod tests {
                     &raw,
                     &events,
                     "",
+                    &searches,
                 )
                 .unwrap();
                 let response = client.read().unwrap().into_text().unwrap();
