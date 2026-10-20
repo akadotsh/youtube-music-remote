@@ -3,6 +3,7 @@ import {
   type Command,
   type DeviceCredential,
   type PlayerState,
+  type SearchResult,
 } from "@yt-remote/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { websocketUrl } from "./connection";
@@ -21,6 +22,11 @@ export function useRemote(connection: SavedConnection | undefined) {
   const pending = useRef<PendingControls>({});
   const volumeQueues = useRef({ volume: new VolumeQueue(), systemVolume: new VolumeQueue() });
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>();
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const searchRequest = useRef<string | undefined>(undefined);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!connection) return;
@@ -45,6 +51,12 @@ export function useRemote(connection: SavedConnection | undefined) {
         if (typeof data !== "string") return;
         const message = parseServerMessage(data);
         if (!message) return;
+        if (message.type === "SEARCH_RESULTS" && message.requestId === searchRequest.current) {
+          clearTimeout(searchTimer.current);
+          searchRequest.current = undefined;
+          setSearchResults(message.results);
+          setSearching(false);
+        }
         if (message.type === "STATE") {
           reportedState.current = message.state;
           setState(reconcileControls(message.state, pending.current));
@@ -64,6 +76,13 @@ export function useRemote(connection: SavedConnection | undefined) {
         }
         if (message.type === "PEER_STATUS") setPeerConnected(message.connected);
         if (message.type === "ERROR") {
+          if (message.requestId && message.requestId === searchRequest.current) {
+            clearTimeout(searchTimer.current);
+            searchRequest.current = undefined;
+            setSearching(false);
+            setSearchError(message.message);
+            return;
+          }
           pending.current = {};
           Object.values(volumeQueues.current).forEach((queue) => queue.reset());
           setState(reportedState.current);
@@ -74,6 +93,10 @@ export function useRemote(connection: SavedConnection | undefined) {
         if (!active) return;
         setStatus("disconnected");
         setPeerConnected(false);
+        if (searchRequest.current) setSearchError("Disconnected from the Mac. Try searching again after reconnecting.");
+        clearTimeout(searchTimer.current);
+        searchRequest.current = undefined;
+        setSearching(false);
         clearTimeout(feedbackTimer.current);
         pending.current = {};
         Object.values(volumeQueues.current).forEach((queue) => queue.reset());
@@ -90,6 +113,7 @@ export function useRemote(connection: SavedConnection | undefined) {
       active = false;
       clearTimeout(timer);
       clearTimeout(feedbackTimer.current);
+      clearTimeout(searchTimer.current);
       pending.current = {};
       Object.values(volumeQueues.current).forEach((queue) => queue.reset());
       socket.close();
@@ -128,7 +152,26 @@ export function useRemote(connection: SavedConnection | undefined) {
     }, 5_000);
   }, []);
 
-  return { status, peerConnected, state, error, setError, send };
+  const search = useCallback((query: string) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !peerConnected) {
+      return setSearchError("Connect your Mac before searching.");
+    }
+    if (!query.trim() || query.length > 200) return setSearchError("Enter a search of 1–200 characters.");
+    clearTimeout(searchTimer.current);
+    setSearching(true);
+    setError("");
+    setSearchError("");
+    setSearchResults(undefined);
+    searchRequest.current = sendOn(socket, { type: "SEARCH", query: query.trim() });
+    searchTimer.current = setTimeout(() => {
+      searchRequest.current = undefined;
+      setSearching(false);
+      setSearchError("Search timed out. Check that YouTube Music is open on your Mac.");
+    }, 20_000);
+  }, [peerConnected]);
+
+  return { status, peerConnected, state, error, setError, send, search, searching, searchResults, searchError };
 }
 
 function sendOn(socket: WebSocket, command: Command): string {

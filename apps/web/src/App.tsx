@@ -1,5 +1,5 @@
 import type { DeviceCredential, PlayerState } from "@yt-remote/protocol";
-import { Pause, Play, RotateCcw, SkipBack, SkipForward, Unplug, X } from "lucide-react";
+import { Pause, Play, RotateCcw, Search, SkipBack, SkipForward, Unplug, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./components/ui/button";
 import { type SavedConnection, useRemote } from "./useRemote";
@@ -57,16 +57,51 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
 
 function Remote({ connection, onForget }: { connection: SavedConnection; onForget: () => void }) {
   const remote = useRemote(connection);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] text-foreground">
       <header className="flex items-center justify-between">
         <div><h1 className="font-semibold">YouTube Music Remote</h1><p className="text-xs text-muted-foreground">{remote.status === "connected" ? (remote.peerConnected ? "Mac connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
-        <Button variant="ghost" size="icon" aria-label="Forget device" onClick={onForget}><Unplug className="size-5" /></Button>
+        <div className="flex">
+          <Button variant="ghost" size="icon" aria-label={searchOpen ? "Back to player" : "Search songs"} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>
+          <Button variant="ghost" size="icon" aria-label="Forget device" onClick={onForget}><Unplug className="size-5" /></Button>
+        </div>
       </header>
 
-      <div className="flex flex-1 flex-col"><Player remote={remote} /></div>
+      <div className="flex flex-1 flex-col">{searchOpen ? <SongSearch remote={remote} onPlay={() => setSearchOpen(false)} /> : <Player remote={remote} />}</div>
     </main>
+  );
+}
+
+function SongSearch({ remote, onPlay }: { remote: ReturnType<typeof useRemote>; onPlay: () => void }) {
+  const [query, setQuery] = useState("");
+  const connected = remote.status === "connected" && remote.peerConnected;
+  return (
+    <section className="py-6">
+      <h2 className="text-xl font-semibold">Search songs</h2>
+      <form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); remote.search(query); }}>
+        <label className="sr-only" htmlFor="song-search">Song or artist</label>
+        <input id="song-search" type="search" maxLength={200} value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Song or artist" className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 outline-none focus:border-primary" />
+        <Button type="submit" disabled={!connected || remote.searching || !query.trim()}>Search</Button>
+      </form>
+      <p className="mt-3 text-sm text-muted-foreground">Plays in YouTube Music on your Mac.</p>
+      {!connected && <p role="status" className="mt-3 text-sm text-muted-foreground">Connect your Mac to search and play.</p>}
+      {remote.searchError && <p role="alert" className="mt-4 text-sm text-red-400">{remote.searchError}</p>}
+      {remote.error && !remote.searchError && <p role="alert" className="mt-4 text-sm text-red-400">{remote.error}</p>}
+      <div role="status" aria-live="polite" className="mt-4 text-sm text-muted-foreground">
+        {remote.searching ? "Searching…" : remote.searchResults ? `${remote.searchResults.length} songs found` : ""}
+      </div>
+      <ul className="mt-3 space-y-3">
+        {remote.searchResults?.map((song) => (
+          <li key={song.videoId} className="flex items-center gap-3 rounded-xl bg-muted p-3">
+            {song.artwork && <img src={song.artwork} alt="" className="size-12 flex-none rounded-lg object-cover" />}
+            <div className="min-w-0 flex-1"><p className="truncate font-medium">{song.title}</p><p className="truncate text-xs text-muted-foreground">{song.artist}</p></div>
+            <Button variant="ghost" size="icon" aria-label={`Play ${song.title}`} disabled={!connected} onClick={() => { remote.send({ type: "PLAY_SONG", videoId: song.videoId }); onPlay(); }}><Play className="size-5 fill-current" /></Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
