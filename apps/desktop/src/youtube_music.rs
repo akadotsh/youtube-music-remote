@@ -27,12 +27,7 @@ impl DesktopController {
             duration: valid_time(state.duration),
             position: valid_time(state.position),
             artwork: None,
-            artwork_url: state.artwork.and_then(|value| {
-                url::Url::parse(&value)
-                    .ok()
-                    .filter(|url| url.scheme() == "https" && url.host_str().is_some())
-                    .map(|url| url.to_string())
-            }),
+            artwork_url: state.artwork.and_then(|value| artwork_url(&value)),
             artwork_mime_type: None,
         };
 
@@ -116,6 +111,19 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
+fn artwork_url(value: &str) -> Option<String> {
+    let mut url = url::Url::parse(value).ok()?;
+    let host = url.host_str()?;
+    if url.scheme() != "https" {
+        return None;
+    }
+    if host.ends_with(".googleusercontent.com") || host.ends_with(".ggpht.com") {
+        let path = url.path().split('=').next().unwrap_or(url.path());
+        url.set_path(&format!("{path}=w1024-h1024-l90-rj"));
+    }
+    Some(url.into())
+}
+
 fn valid_time(value: Option<f64>) -> Option<f64> {
     value.filter(|value| value.is_finite() && *value >= 0.)
 }
@@ -183,6 +191,19 @@ const PREVIOUS_SELECTORS: &str =
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn requests_large_google_cover_only_for_google_hosts() {
+        assert_eq!(
+            artwork_url("https://lh3.googleusercontent.com/cover=w60-h60-l90-rj").as_deref(),
+            Some("https://lh3.googleusercontent.com/cover=w1024-h1024-l90-rj")
+        );
+        assert_eq!(
+            artwork_url("https://example.com/cover=w60").as_deref(),
+            Some("https://example.com/cover=w60")
+        );
+        assert!(artwork_url("javascript:alert(1)").is_none());
+    }
 
     #[test]
     fn builds_tab_specific_commands() {
