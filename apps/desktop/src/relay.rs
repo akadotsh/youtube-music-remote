@@ -182,6 +182,7 @@ fn handle_message(
                 send_state(socket, controller, last_state, true)?;
             }
         }
+        RelayMessage::Error { message } => events.send(RelayEvent::Error(message))?,
     }
     Ok(())
 }
@@ -298,6 +299,8 @@ enum RelayMessage {
     },
     #[serde(rename = "PEER_STATUS")]
     PeerStatus { connected: bool },
+    #[serde(rename = "ERROR")]
+    Error { message: String },
 }
 
 #[derive(Deserialize)]
@@ -334,10 +337,12 @@ enum DesktopMessage<'a> {
 struct PlayerState {
     title: String,
     artist: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     artwork: Option<String>,
     duration: f64,
     position: f64,
     is_playing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     source: Option<String>,
     capabilities: Capabilities,
 }
@@ -440,5 +445,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(value["state"]["capabilities"]["seek"], true);
+        assert!(value["state"].get("artwork").is_none());
+        assert!(value["state"].get("source").is_none());
     }
 }
