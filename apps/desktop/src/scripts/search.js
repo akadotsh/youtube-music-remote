@@ -1,7 +1,10 @@
 (() => {
   const [id, query] = SEARCH_INPUT;
   const app = document.querySelector('ytmusic-app');
-  if (typeof app?.networkManager?.fetch !== 'function') return 'missing';
+  const manager = app?.networkManager || app?.inst?.networkManager;
+  const config = window.ytcfg;
+  const context = config?.get?.('INNERTUBE_CONTEXT');
+  if (typeof manager?.fetch !== 'function' && (!context?.client?.clientVersion || typeof window.fetch !== 'function')) return 'search-unavailable';
   const job = { id, status: 'pending' };
   window.__ytRemoteSearch = job;
   const results = [];
@@ -27,12 +30,30 @@
     for (const value of Object.values(node)) visit(value);
   };
   let timeout;
-  Promise.race([
-    Promise.resolve().then(() => app.networkManager.fetch('/search', {
+  const request = () => {
+    const body = {
       query,
       // YouTube Music's Songs search filter.
       params: 'EgWKAQIIAWoMEA4QChADEAQQCRAF',
-    })),
+    };
+    if (typeof manager?.fetch === 'function') return manager.fetch('/search', body);
+    const key = config.get('INNERTUBE_API_KEY');
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-YouTube-Client-Name': String(config.get('INNERTUBE_CONTEXT_CLIENT_NAME') || 67),
+      'X-YouTube-Client-Version': context.client.clientVersion,
+    };
+    if (context.client.visitorData) headers['X-Goog-Visitor-Id'] = context.client.visitorData;
+    return window.fetch('/youtubei/v1/search?prettyPrint=false' + (key ? '&key=' + encodeURIComponent(key) : ''), {
+      method: 'POST', credentials: 'same-origin', headers,
+      body: JSON.stringify({ context, ...body }),
+    }).then((response) => {
+      if (!response.ok) throw new Error(`YouTube Music search failed (HTTP ${response.status}). Try reloading the music tab.`);
+      return response.json();
+    });
+  };
+  Promise.race([
+    Promise.resolve().then(request),
     new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Search timed out. Try again.')), 12000); }),
   ]).then((response) => {
     if (!response?.contents) throw new Error('YouTube Music returned an unsupported search response');

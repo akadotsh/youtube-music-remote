@@ -39,5 +39,41 @@ timedOut.timeout();
 await new Promise(setImmediate);
 assert.equal(timedOut.job.status, "error");
 assert.match(timedOut.job.message, /timed out/);
-const unavailable = vm.createContext({ document: { querySelector: () => null } });
-assert.equal(vm.runInContext(script.replace("SEARCH_INPUT", '[1,"song"]'), unavailable), "missing");
+const unavailable = vm.createContext({ window: {}, document: { querySelector: () => null } });
+assert.equal(vm.runInContext(script.replace("SEARCH_INPUT", '[1,"song"]'), unavailable), "search-unavailable");
+
+// Chrome's Polymer wrapper need not expose the application's network manager.
+async function browserSearch(status = 200) {
+  let requested = false;
+  const client = { clientName: "WEB_REMIX", clientVersion: "current-page-version", visitorData: "visitor" };
+  const values = { INNERTUBE_CONTEXT: { client }, INNERTUBE_CONTEXT_CLIENT_NAME: 67, INNERTUBE_API_KEY: "page-key&value" };
+  const context = vm.createContext({
+    document: { querySelector: () => ({}) },
+    window: { ytcfg: { get: (key) => values[key] }, fetch: async (url, options) => {
+      requested = true;
+      assert.equal(url, "/youtubei/v1/search?prettyPrint=false&key=page-key%26value");
+      assert.equal(options.method, "POST");
+      assert.equal(options.credentials, "same-origin");
+      assert.equal(options.headers["X-YouTube-Client-Version"], client.clientVersion);
+      assert.equal(options.headers["X-YouTube-Client-Name"], "67");
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.context.client.clientName, "WEB_REMIX");
+      assert.equal(payload.query, query);
+      return { ok: status === 200, status, json: async () => ({ contents: [song("aB1_-Cd2Ef3")] }) };
+    } },
+    setTimeout: () => 1, clearTimeout: () => {},
+  });
+  assert.equal(vm.runInContext(script.replace("SEARCH_INPUT", JSON.stringify([2, query])), context), "ok");
+  await new Promise(setImmediate);
+  assert.equal(requested, true);
+  return context.window.__ytRemoteSearch;
+}
+assert.equal((await browserSearch()).results[0].videoId, "aB1_-Cd2Ef3");
+assert.match((await browserSearch(403)).message, /HTTP 403/);
+
+const wrapped = vm.createContext({ document: { querySelector: () => ({ inst: { networkManager: {
+  fetch: async () => ({ contents: [] }),
+} } }) }, window: {}, setTimeout: () => 1, clearTimeout: () => {} });
+assert.equal(vm.runInContext(script.replace("SEARCH_INPUT", '[3,"song"]'), wrapped), "ok");
+await new Promise(setImmediate);
+assert.equal(wrapped.window.__ytRemoteSearch.status, "done");

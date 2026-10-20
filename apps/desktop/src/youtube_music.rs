@@ -24,10 +24,18 @@ impl DesktopController {
         let id = NEXT_SEARCH.fetch_add(1, Ordering::Relaxed);
         let input = serde_json::to_string(&(id, query.trim()))?;
         let script = include_str!("scripts/search.js").replace("SEARCH_INPUT", &input);
-        if run_in_youtube_music(&script)?.as_deref() != Some("ok") {
-            return Err(MediaError::CommandFailed(
-                "Open and load YouTube Music in Chrome before searching".into(),
-            ));
+        match run_in_youtube_music(&script)?.as_deref() {
+            Some("ok") => {}
+            None => {
+                return Err(MediaError::CommandFailed(
+                    "Open YouTube Music in Chrome before searching".into(),
+                ));
+            }
+            Some(_) => {
+                return Err(MediaError::CommandFailed(
+                    "YouTube Music search is not ready. Reload the music tab and try again.".into(),
+                ));
+            }
         }
         let poll = format!(
             "JSON.stringify(window.__ytRemoteSearch?.id === {id} ? window.__ytRemoteSearch : {{status:'error',message:'Search was interrupted'}})"
