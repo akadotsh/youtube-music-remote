@@ -41,16 +41,17 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 text-foreground">
-      <div className="mb-8 size-14 rounded-2xl bg-primary p-4"><Play className="fill-white" /></div>
-      <h1 className="text-3xl font-bold tracking-tight">Connect to your Mac</h1>
-      <p className="mt-2 text-muted-foreground">Open the desktop app, create a pairing code, then enter it here.</p>
+    <main className="app-shell glass-surface pairing-shell">
+      <div className="brand-mark"><Play className="size-6 fill-current" aria-hidden="true" /></div>
+      <p className="eyebrow mt-6">Music Remote</p>
+      <h1 className="mt-2 text-3xl font-semibold leading-tight">Connect to your Mac</h1>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Create a code in the desktop app, then enter it below. Your music stays on your Mac.</p>
       <label className="mt-8 text-sm font-medium" htmlFor="relay">Relay URL</label>
-      <input id="relay" type="url" value={relayUrl} onChange={(event) => setRelayUrl(event.target.value)} placeholder="https://your-worker.workers.dev" className="mt-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 outline-none focus:border-primary" />
+      <input id="relay" type="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" value={relayUrl} onChange={(event) => setRelayUrl(event.target.value)} placeholder="https://your-worker.workers.dev" className="glass-field mt-2 w-full" />
       <label className="mt-4 text-sm font-medium" htmlFor="code">Pairing code</label>
-      <input id="code" inputMode="numeric" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} placeholder="000000" className="mt-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-center text-2xl tracking-[0.35em] outline-none focus:border-primary" />
-      {error && <p role="alert" className="mt-3 text-sm text-red-400">{error}</p>}
-      <Button className="mt-6 rounded-xl" disabled={loading || code.length !== 6 || !relayUrl} onClick={pair}>{loading ? "Connecting…" : "Connect"}</Button>
+      <input id="code" inputMode="numeric" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} placeholder="000000" className="glass-field time-label mt-2 w-full text-center text-2xl tracking-[0.35em]" />
+      {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+      <Button className="mt-8 w-full" disabled={loading || code.length !== 6 || !relayUrl} onClick={pair}>{loading ? "Connecting…" : "Connect to Mac"}</Button>
     </main>
   );
 }
@@ -60,12 +61,12 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
   const [searchOpen, setSearchOpen] = useState(false);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(24px,env(safe-area-inset-top))] text-foreground">
-      <header className="flex items-center justify-between">
-        <div><h1 className="font-semibold">YouTube Music Remote</h1><p className="text-xs text-muted-foreground">{remote.status === "connected" ? (remote.peerConnected ? "Mac connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
+    <main className="app-shell glass-surface">
+      <header className="app-header">
+        <div className="min-w-0"><h1 className="font-semibold">Music Remote</h1><p className="connection-status" role="status"><span aria-hidden="true" className={`status-dot ${remote.status === "connected" && remote.peerConnected ? "is-connected" : ""}`} />{remote.status === "connected" ? (remote.peerConnected ? "Mac connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
         <div className="flex">
-          <Button variant="ghost" size="icon" aria-label={searchOpen ? "Back to player" : "Search songs"} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>
-          <Button variant="ghost" size="icon" aria-label="Forget device" onClick={onForget}><Unplug className="size-5" /></Button>
+          <Button variant={searchOpen ? "secondary" : "ghost"} size="icon" aria-label={searchOpen ? "Back to player" : "Search songs"} aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>
+          <Button variant="ghost" size="icon" aria-label="Forget device" title="Forget paired Mac" onClick={onForget}><Unplug className="size-5" /></Button>
         </div>
       </header>
 
