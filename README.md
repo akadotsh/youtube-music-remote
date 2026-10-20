@@ -37,6 +37,12 @@ pnpm desktop:check
 
 Create a self-contained, ad-hoc signed macOS application with `pnpm desktop:bundle`. End users of the bundle do not need Homebrew, CMake, Rust, or `media-control`.
 
+### Keep awake while playing
+
+Enable **Keep awake while playing** in the desktop agent to prevent idle system sleep during playback. The display can still turn off, and the Mac can stay locked. Protection is released when playback pauses or stops, media-state reading fails, the checkbox is cleared, or the agent exits. The checkbox starts unchecked each launch; it does not change macOS power settings permanently.
+
+This does not override **Apple menu → Sleep**, closing the lid, or macOS safety-related sleep. Keeping the Mac awake uses more battery than sleep. Leave the agent running and use **Lock Screen**, rather than Sleep, when controlling music from your phone.
+
 ## Deploy the relay
 
 Authenticate Wrangler and deploy the Worker and its Durable Objects:
