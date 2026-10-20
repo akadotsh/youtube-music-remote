@@ -5,7 +5,7 @@ import { createServer } from "vite";
 
 const server = await createServer({ root: new URL(".", import.meta.url).pathname, server: { middlewareMode: true, ws: false }, appType: "custom" });
 try {
-  const { Player } = await server.ssrLoadModule("/src/App.tsx");
+  const { Player, MiniPlayer } = await server.ssrLoadModule("/src/App.tsx");
   const remote = { state: { title: "Song", artist: "Artist", duration: 100, position: 20, isPlaying: true, volume: 0 }, send() {}, setError() {} };
   const render = () => renderToStaticMarkup(createElement(Player, { remote }));
   let html = render();
@@ -17,6 +17,11 @@ try {
   assert.match(html, /id="mac-volume"[^>]*value="40"/);
   delete remote.state.volume;
   assert.doesNotMatch(render(), /id="music-volume"/);
+  const mini = () => renderToStaticMarkup(createElement(MiniPlayer, { remote, onOpen() {} }));
+  assert.match(mini(), /aria-label="Back to player"/);
+  assert.match(mini(), /aria-label="Pause"/);
+  remote.state.isPlaying = false;
+  assert.match(mini(), /aria-label="Play"/);
 } finally {
   await server.close();
 }

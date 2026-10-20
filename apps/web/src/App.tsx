@@ -1,5 +1,5 @@
 import type { DeviceCredential, PlayerState } from "@yt-remote/protocol";
-import { Pause, Play, RotateCcw, Search, SkipBack, SkipForward, Unplug, Volume2, X } from "lucide-react";
+import { Pause, Play, RotateCcw, Search, Settings, SkipBack, SkipForward, Unplug, Volume2, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./components/ui/button";
 import { type SavedConnection, useRemote } from "./useRemote";
@@ -59,6 +59,7 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
 function Remote({ connection, onForget }: { connection: SavedConnection; onForget: () => void }) {
   const remote = useRemote(connection);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <main className="app-shell">
@@ -66,13 +67,29 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
         <div className="min-w-0"><h1 className="font-semibold">Music Remote</h1><p className="connection-status" role="status"><span aria-hidden="true" className={`status-dot ${remote.status === "connected" && remote.peerConnected ? "is-connected" : ""}`} />{remote.status === "connected" ? (remote.peerConnected ? "Mac connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
         <div className="flex">
           <Button variant={searchOpen ? "secondary" : "ghost"} size="icon" aria-label={searchOpen ? "Back to player" : "Search songs"} aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>
-          <Button variant="ghost" size="icon" aria-label="Forget device" title="Forget paired Mac" onClick={onForget}><Unplug className="size-5" /></Button>
+          <Button variant={settingsOpen ? "secondary" : "ghost"} size="icon" aria-label="Connection settings" aria-expanded={settingsOpen} aria-controls="connection-settings" onClick={() => setSettingsOpen(!settingsOpen)}><Settings className="size-5" /></Button>
         </div>
       </header>
 
       <div className="app-content">{searchOpen ? <SongSearch remote={remote} onPlay={() => setSearchOpen(false)} /> : <Player remote={remote} />}</div>
+      {searchOpen && remote.state?.title && <MiniPlayer remote={remote} onOpen={() => setSearchOpen(false)} />}
+      {settingsOpen && <section id="connection-settings" className="connection-settings" aria-label="Connection settings">
+        <div className="flex items-center justify-between"><h2 className="text-sm font-medium">Connection settings</h2><Button variant="ghost" size="icon" aria-label="Close connection settings" onClick={() => setSettingsOpen(false)}><X className="size-4" /></Button></div>
+        <Button variant="secondary" className="w-full" onClick={onForget}><Unplug className="mr-2 size-4" />Forget paired Mac</Button>
+      </section>}
     </main>
   );
+}
+
+export function MiniPlayer({ remote, onOpen }: { remote: ReturnType<typeof useRemote>; onOpen: () => void }) {
+  const state = remote.state ?? emptyState;
+  return <footer className="mini-player" aria-label="Now playing">
+    <button className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label="Back to player" onClick={onOpen}>
+      {state.artwork && <img src={state.artwork} alt="" className="size-12 flex-none rounded-lg object-cover" />}
+      <span className="min-w-0"><span className="block truncate text-sm font-medium">{state.title || "Nothing playing"}</span><span className="block truncate text-xs text-muted-foreground">{state.artist}</span></span>
+    </button>
+    <Button variant="ghost" size="icon" aria-label={state.isPlaying ? "Pause" : "Play"} onClick={() => remote.send({ type: state.isPlaying ? "PAUSE" : "PLAY" })}>{state.isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}</Button>
+  </footer>;
 }
 
 function SongSearch({ remote, onPlay }: { remote: ReturnType<typeof useRemote>; onPlay: () => void }) {
