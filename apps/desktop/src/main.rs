@@ -2,6 +2,7 @@ use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Sizable as _, Theme,
     button::{Button, ButtonVariants as _},
+    checkbox::Checkbox,
     input::{Input, InputState},
     scroll::ScrollableElement as _,
     slider::{Slider, SliderEvent, SliderState, SliderValue},
@@ -80,6 +81,8 @@ struct Player {
     pairing_code: Option<String>,
     relay_status: String,
     relay_error: Option<String>,
+    keep_awake: bool,
+    idle_sleep: idle_sleep::IdleSleepGuard,
 }
 
 impl Player {
@@ -211,6 +214,8 @@ impl Player {
                 "Not paired".into()
             },
             relay_error: None,
+            keep_awake: false,
+            idle_sleep: idle_sleep::IdleSleepGuard::default(),
         }
     }
 
@@ -287,6 +292,11 @@ impl Player {
         cx: &mut Context<Self>,
     ) -> Option<(Entity<SliderState>, f64)> {
         self.loading = false;
+        let playing = result
+            .as_ref()
+            .ok()
+            .and_then(|state| state.as_ref())
+            .is_some_and(|state| state.is_playing);
         match result {
             Ok(state) => {
                 let mut track = state.map(Track::from);
@@ -327,6 +337,7 @@ impl Player {
             }
             Err(error) => self.error = Some(error.to_string()),
         }
+        self.update_idle_sleep(playing);
         cx.notify();
 
         if self.seeking {
@@ -338,6 +349,12 @@ impl Player {
                 progress_percentage(track.position, track.duration),
             )
         })
+    }
+
+    fn update_idle_sleep(&mut self, playing: bool) {
+        if let Err(error) = self.idle_sleep.set_active(self.keep_awake && playing) {
+            self.error = Some(format!("Could not update idle-sleep protection: {error}"));
+        }
     }
 
     fn send(&mut self, command: MediaCommand, cx: &mut Context<Self>) {
@@ -656,6 +673,20 @@ impl Render for Player {
                     })
                     .into_any_element()
             })
+            .child(
+                div().w_full().max_w(px(380.)).flex().flex_col().gap_2()
+                    .child(Checkbox::new("keep-awake")
+                        .label("Keep awake while playing")
+                        .checked(self.keep_awake)
+                        .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                            this.keep_awake = *checked;
+                            let playing = this.error.is_none() && this.track.as_ref().is_some_and(|track| track.is_playing);
+                            this.update_idle_sleep(playing);
+                            cx.notify();
+                        })))
+                    .child(div().text_xs().text_color(cx.theme().muted_foreground)
+                        .child("Display can turn off. Manual Sleep and closing the lid still stop music.")),
+            )
     }
 }
 
@@ -721,7 +752,7 @@ fn main() {
     application().with_assets(assets::Assets).run(|cx| {
         init(cx);
         Theme::sync_system_appearance(None, cx);
-        let bounds = Bounds::centered(None, size(px(460.), px(640.)), cx);
+        let bounds = Bounds::centered(None, size(px(460.), px(680.)), cx);
         open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -772,3 +803,4 @@ mod tests {
         }
     }
 }
+mod idle_sleep;
