@@ -1,6 +1,6 @@
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{
-    ActiveTheme as _, Disableable as _, Sizable as _,
+    ActiveTheme as _, Disableable as _, Sizable as _, Theme,
     button::{Button, ButtonVariants as _},
     input::{Input, InputState},
     scroll::ScrollableElement as _,
@@ -8,8 +8,8 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     AnyElement, Bounds, Context, Entity, Image, ImageFormat, IntoElement, ObjectFit, Render,
-    Subscription, Task, Window, WindowBackgroundAppearance, WindowBounds, WindowOptions,
-    application, assets, div, img, init, open_window, prelude::*, px, size,
+    Subscription, Task, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowOptions, application, assets, div, img, init, open_window, prelude::*, px, size,
 };
 use std::{
     sync::{
@@ -84,6 +84,10 @@ struct Player {
 
 impl Player {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        cx.observe_window_appearance(window, |_, window, cx| {
+            Theme::sync_system_appearance(Some(window), cx);
+        })
+        .detach();
         let progress = cx.new(|_| {
             SliderState::new()
                 .min(0.)
@@ -369,7 +373,12 @@ impl Player {
 
         match self.track.as_ref().and_then(|track| track.artwork.clone()) {
             Some(artwork) => frame
-                .child(img(artwork).size_full().object_fit(ObjectFit::Cover))
+                .child(
+                    img(artwork)
+                        .size_full()
+                        .rounded_2xl()
+                        .object_fit(ObjectFit::Cover),
+                )
                 .into_any_element(),
             None => frame
                 .flex()
@@ -395,17 +404,11 @@ impl Player {
 
         div()
             .w_full()
-            .max_w(px(520.))
+            .max_w(px(380.))
             .flex()
             .flex_col()
             .items_center()
             .gap_4()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("NOW PLAYING"),
-            )
             .child(self.render_artwork(cx))
             .child(
                 div()
@@ -416,7 +419,7 @@ impl Player {
                     .gap_1()
                     .child(
                         div()
-                            .text_2xl()
+                            .text_xl()
                             .font_semibold()
                             .text_center()
                             .child(track.title.clone()),
@@ -425,6 +428,7 @@ impl Player {
                         div()
                             .text_base()
                             .text_color(cx.theme().muted_foreground)
+                            .text_center()
                             .child(track.artist.clone()),
                     )
                     .child(
@@ -509,7 +513,7 @@ impl Player {
     fn render_pairing(&mut self, cx: &mut Context<Self>) -> AnyElement {
         div()
             .w_full()
-            .max_w(px(520.))
+            .max_w(px(380.))
             .flex()
             .flex_col()
             .gap_3()
@@ -584,7 +588,7 @@ impl Render for Player {
             .flex_col()
             .items_center()
             .gap_6()
-            .bg(cx.theme().tokens.background.opacity(0.82))
+            .bg(cx.theme().tokens.background)
             .text_color(cx.theme().foreground)
             .p_6()
             .child(
@@ -716,12 +720,17 @@ fn load_artwork(url: &str) -> Result<Arc<Image>, String> {
 fn main() {
     application().with_assets(assets::Assets).run(|cx| {
         init(cx);
-        let bounds = Bounds::centered(None, size(px(560.), px(720.)), cx);
+        Theme::sync_system_appearance(None, cx);
+        let bounds = Bounds::centered(None, size(px(460.), px(640.)), cx);
         open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("Music Remote".into()),
+                    ..Default::default()
+                }),
                 window_background: WindowBackgroundAppearance::Blurred,
-                window_min_size: Some(size(px(420.), px(600.))),
+                window_min_size: Some(size(px(400.), px(560.))),
                 ..Default::default()
             },
             cx,
