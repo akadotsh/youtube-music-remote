@@ -143,3 +143,13 @@ input[type="range"] { min-height: 36px; accent-color: var(--color-accent); curso
     border-color: var(--color-muted-foreground);
   }
 }
+.player-artwork {
+  width: min(100%, 280px);
+  align-self: center;
+  box-shadow: 0 12px 30px var(--shadow);
+}
+.volume-control { padding: 12px 16px 6px; border-radius: 16px; background: var(--field); }
+.search-results > li + li { border-top: 1px solid var(--field); }
+@media (max-height: 740px) {
+  .player-artwork { width: min(100%, 220px); }
+}
