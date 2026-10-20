@@ -361,12 +361,14 @@ impl From<Option<MediaState>> for PlayerState {
                 capabilities: Capabilities::default(),
             };
         };
-        let artwork = state.artwork.map(|bytes| {
-            format!(
-                "data:{};base64,{}",
-                state.artwork_mime_type.as_deref().unwrap_or("image/jpeg"),
-                STANDARD.encode(bytes)
-            )
+        let artwork = state.artwork_url.or_else(|| {
+            state.artwork.map(|bytes| {
+                format!(
+                    "data:{};base64,{}",
+                    state.artwork_mime_type.as_deref().unwrap_or("image/jpeg"),
+                    STANDARD.encode(bytes)
+                )
+            })
         });
         Self {
             title: state.title,
@@ -436,6 +438,26 @@ mod tests {
             room_id: "123".into(),
             token: "secret".into(),
         }));
+    }
+
+    #[test]
+    fn forwards_tab_artwork_without_system_artwork() {
+        let state = PlayerState::from(Some(MediaState {
+            title: "Song".into(),
+            artist: None,
+            album: None,
+            source: "YouTube Music".into(),
+            is_playing: true,
+            duration: None,
+            position: None,
+            artwork: None,
+            artwork_url: Some("https://lh3.googleusercontent.com/cover".into()),
+            artwork_mime_type: None,
+        }));
+        assert_eq!(
+            state.artwork.as_deref(),
+            Some("https://lh3.googleusercontent.com/cover")
+        );
     }
 
     #[test]

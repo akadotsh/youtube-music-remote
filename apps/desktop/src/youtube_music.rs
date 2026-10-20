@@ -27,6 +27,12 @@ impl DesktopController {
             duration: valid_time(state.duration),
             position: valid_time(state.position),
             artwork: None,
+            artwork_url: state.artwork.and_then(|value| {
+                url::Url::parse(&value)
+                    .ok()
+                    .filter(|url| url.scheme() == "https" && url.host_str().is_some())
+                    .map(|url| url.to_string())
+            }),
             artwork_mime_type: None,
         };
 
@@ -119,6 +125,8 @@ fn valid_time(value: Option<f64>) -> Option<f64> {
 struct BrowserState {
     title: String,
     artist: String,
+    #[serde(default)]
+    artwork: Option<String>,
     is_playing: bool,
     duration: Option<f64>,
     position: Option<f64>,
@@ -145,9 +153,11 @@ end run
 const READ_STATE: &str = r#"(() => {
   const video = document.querySelector('video');
   const text = (selectors) => selectors.map((selector) => document.querySelector(selector)).find(Boolean)?.textContent?.trim() || '';
+  const cover = document.querySelector('ytmusic-player-bar img');
   return JSON.stringify({
     title: text(['ytmusic-player-bar .title', '.content-info-wrapper .title']),
     artist: text(['ytmusic-player-bar .byline', '.content-info-wrapper .byline']),
+    artwork: cover?.currentSrc || cover?.src || null,
     isPlaying: Boolean(video && !video.paused && !video.ended),
     duration: Number.isFinite(video?.duration) ? video.duration : null,
     position: Number.isFinite(video?.currentTime) ? video.currentTime : null
@@ -192,10 +202,14 @@ mod tests {
     #[test]
     fn parses_browser_state() {
         let state: BrowserState = serde_json::from_str(
-            r#"{"title":"Song","artist":"Artist","isPlaying":true,"duration":120,"position":10}"#,
+            r#"{"title":"Song","artist":"Artist","artwork":"https://lh3.googleusercontent.com/cover","isPlaying":true,"duration":120,"position":10}"#,
         )
         .unwrap();
         assert_eq!(state.title, "Song");
         assert_eq!(state.position, Some(10.));
+        assert_eq!(
+            state.artwork.as_deref(),
+            Some("https://lh3.googleusercontent.com/cover")
+        );
     }
 }

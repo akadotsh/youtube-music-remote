@@ -12,6 +12,7 @@ pub struct MediaState {
     pub duration: Option<f64>,
     pub position: Option<f64>,
     pub artwork: Option<Vec<u8>>,
+    pub artwork_url: Option<String>,
     pub artwork_mime_type: Option<String>,
 }
 
@@ -145,6 +146,7 @@ impl MediaController for MediaRemoteAdapter {
                 .artwork_data
                 .and_then(|value| STANDARD.decode(value).ok()),
             artwork_mime_type: payload.artwork_mime_type,
+            artwork_url: None,
         }))
     }
 
