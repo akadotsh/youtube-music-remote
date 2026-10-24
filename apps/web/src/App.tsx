@@ -42,6 +42,7 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
 
   return (
     <main className="app-shell pairing-shell">
+      <section className="pairing-card">
       <div className="brand-mark"><Play className="size-6 fill-current" aria-hidden="true" /></div>
       <p className="eyebrow mt-6">Music Remote</p>
       <h1 className="mt-2 text-3xl font-semibold leading-tight">Connect to your Mac</h1>
@@ -52,6 +53,7 @@ function Pairing({ onPaired }: { onPaired: (connection: SavedConnection) => void
       <input id="code" inputMode="numeric" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} placeholder="000000" className="glass-field time-label mt-2 w-full text-center text-2xl tracking-[0.35em]" />
       {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
       <Button className="mt-8 w-full" disabled={loading || code.length !== 6 || !relayUrl} onClick={pair}>{loading ? "Connecting…" : "Connect to Mac"}</Button>
+      </section>
     </main>
   );
 }
