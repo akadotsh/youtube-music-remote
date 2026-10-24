@@ -120,8 +120,10 @@ impl MediaController for DesktopController {
     fn current_state(&self) -> Result<Option<MediaState>, MediaError> {
         let system = self.system.current_state()?;
         match system.as_ref().map(|state| state.source.as_str()) {
-            Some("com.google.Chrome") => self.youtube_music_state().map_err(chrome_setup_error),
-            Some("com.apple.Safari") => self
+            Some(source) if is_chrome(source) => {
+                self.youtube_music_state().map_err(chrome_setup_error)
+            }
+            Some(source) if is_safari(source) => self
                 .safari_youtube_music_state()
                 .map_err(safari_setup_error),
             Some(source) if is_browser(source) => Ok(None),
@@ -134,14 +136,24 @@ impl MediaController for DesktopController {
         if let MediaCommand::SetSystemVolume(volume) = command {
             return crate::system_volume::set(volume);
         }
-        if !is_tab_specific(&command) && self.system.current_state()?.is_some() {
+        let system = self.system.current_state()?;
+        let source = system.as_ref().map(|state| state.source.as_str());
+        if source.is_some_and(|source| should_use_system(&command, source)) {
             return self.system.send(command);
         }
         let script = command_script(&command)?;
-        match run_in_youtube_music(&script).map_err(chrome_setup_error)? {
+        let result = if !is_tab_specific(&command) && source.is_some_and(is_safari) {
+            run_in_safari_youtube_music(&script).map_err(safari_setup_error)?
+        } else {
+            run_in_youtube_music(&script).map_err(chrome_setup_error)?
+        };
+        match result {
             Some(result) if result == "ok" => Ok(()),
             Some(_) => Err(MediaError::CommandFailed(
                 "YouTube Music player control is unavailable".into(),
+            )),
+            None if source.is_some_and(is_browser) => Err(MediaError::CommandFailed(
+                "YouTube Music is not the active browser player".into(),
             )),
             None => self.system.send(command),
         }
@@ -155,16 +167,34 @@ fn is_tab_specific(command: &MediaCommand) -> bool {
     )
 }
 
+fn should_use_system(command: &MediaCommand, source: &str) -> bool {
+    !is_tab_specific(command) && !is_browser(source)
+}
+
 fn is_browser(source: &str) -> bool {
-    matches!(
-        source,
-        "com.apple.Safari"
-            | "com.google.Chrome"
-            | "com.brave.Browser"
-            | "com.microsoft.edgemac"
-            | "company.thebrowser.Browser"
-            | "org.mozilla.firefox"
-    )
+    [
+        "com.apple.Safari",
+        "com.google.Chrome",
+        "com.brave.Browser",
+        "com.microsoft.edgemac",
+        "company.thebrowser.Browser",
+        "org.mozilla.firefox",
+    ]
+    .iter()
+    .any(|bundle| {
+        source == *bundle
+            || source
+                .strip_prefix(bundle)
+                .is_some_and(|suffix| suffix.starts_with('.'))
+    })
+}
+
+fn is_chrome(source: &str) -> bool {
+    source == "com.google.Chrome" || source.starts_with("com.google.Chrome.")
+}
+
+fn is_safari(source: &str) -> bool {
+    source == "com.apple.Safari" || source.starts_with("com.apple.Safari.")
 }
 
 fn run_in_safari_youtube_music(javascript: &str) -> Result<Option<String>, MediaError> {
@@ -502,12 +532,19 @@ mod tests {
         }
         assert!(!is_browser("com.apple.Music"));
         assert!(!is_browser("com.spotify.client"));
+        assert!(is_browser("com.google.Chrome.app.youtube"));
+        assert!(is_chrome("com.google.Chrome.app.youtube"));
+        assert!(is_safari("com.apple.Safari.WebApp.youtube"));
     }
 
     #[test]
-    fn only_provider_enhancements_bypass_the_active_system_player() {
-        assert!(!is_tab_specific(&MediaCommand::Play));
-        assert!(!is_tab_specific(&MediaCommand::Seek(10.)));
+    fn browser_video_cannot_take_commands_from_youtube_music() {
+        assert!(!should_use_system(&MediaCommand::Play, "com.google.Chrome"));
+        assert!(!should_use_system(
+            &MediaCommand::Seek(10.),
+            "com.apple.Safari.WebApp.youtube"
+        ));
+        assert!(should_use_system(&MediaCommand::Play, "com.spotify.client"));
         assert!(is_tab_specific(&MediaCommand::SetVolume(0.5)));
         assert!(is_tab_specific(&MediaCommand::PlaySong(
             "aB1_-Cd2Ef3".into()
