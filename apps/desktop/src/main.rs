@@ -359,23 +359,37 @@ impl Player {
     }
 
     fn send(&mut self, command: MediaCommand, cx: &mut Context<Self>) {
+        if self.command_pending {
+            return;
+        }
         let Some(controller) = self.controller.clone() else {
             return;
         };
+        let completed_command = command.clone();
         self.command_pending = true;
         self.error = None;
-        cx.notify();
 
         cx.spawn(async move |this, cx| {
             let result = cx
-                .background_spawn(async move {
-                    controller.send(command)?;
-                    controller.current_state()
-                })
+                .background_spawn(async move { controller.send(command) })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.command_pending = false;
-                this.apply(result, cx);
+                match result {
+                    Ok(()) => {
+                        if let Some(track) = this.track.as_mut() {
+                            match completed_command {
+                                MediaCommand::Play => track.is_playing = true,
+                                MediaCommand::Pause => track.is_playing = false,
+                                _ => {}
+                            }
+                        }
+                        let playing = this.track.as_ref().is_some_and(|track| track.is_playing);
+                        this.update_idle_sleep(playing);
+                    }
+                    Err(error) => this.error = Some(error.to_string()),
+                }
+                cx.notify();
             });
         })
         .detach();
@@ -462,10 +476,7 @@ impl Player {
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(
-                        Slider::new(&self.progress)
-                            .disabled(track.duration.is_none() || self.command_pending),
-                    )
+                    .child(Slider::new(&self.progress).disabled(track.duration.is_none()))
                     .child(
                         div()
                             .w_full()
@@ -488,7 +499,6 @@ impl Player {
                             .ghost()
                             .label("◀◀")
                             .accessibility_label("Previous track")
-                            .disabled(self.command_pending)
                             .on_click(
                                 cx.listener(|this, _, _, cx| this.send(MediaCommand::Previous, cx)),
                             ),
@@ -496,10 +506,10 @@ impl Player {
                     .child(
                         Button::new("play-pause")
                             .large()
+                            .w(px(48.))
                             .primary()
                             .label(toggle_symbol)
                             .accessibility_label(toggle_label)
-                            .disabled(self.command_pending)
                             .on_click(
                                 cx.listener(move |this, _, _, cx| this.send(toggle.clone(), cx)),
                             ),
@@ -510,7 +520,6 @@ impl Player {
                             .ghost()
                             .label("▶▶")
                             .accessibility_label("Next track")
-                            .disabled(self.command_pending)
                             .on_click(
                                 cx.listener(|this, _, _, cx| this.send(MediaCommand::Next, cx)),
                             ),
