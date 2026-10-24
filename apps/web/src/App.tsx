@@ -64,7 +64,7 @@ function Remote({ connection, onForget }: { connection: SavedConnection; onForge
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div className="min-w-0"><h1 className="font-semibold">Music Remote</h1><p className="connection-status" role="status"><span aria-hidden="true" className={`status-dot ${remote.status === "connected" && remote.peerConnected ? "is-connected" : ""}`} />{remote.status === "connected" ? (remote.peerConnected ? "Connected" : "Waiting for Mac") : "Reconnecting…"}</p></div>
+        <div className="min-w-0"><h1 className="font-semibold">Music Remote</h1><p className="connection-status" role="status"><span aria-hidden="true" className={`status-dot ${remote.status === "connected" && remote.peerConnected ? "is-connected" : ""}`} />{remote.status === "connected" ? (remote.peerConnected ? "Connected" : "Waiting to connect") : "Reconnecting…"}</p></div>
         <div className="flex">
           {(remote.state?.volume !== undefined || remote.state?.systemVolume !== undefined) && <VolumePopover remote={remote} />}
           <Button variant={searchOpen ? "secondary" : "ghost"} size="icon" aria-label={searchOpen ? "Back to player" : "Search songs"} aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X className="size-5" /> : <Search className="size-5" />}</Button>

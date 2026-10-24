@@ -274,7 +274,7 @@ impl Player {
                 self.relay_status = match status {
                     RelayStatus::Connecting => "Connecting to relay…",
                     RelayStatus::WaitingForPhone => "Waiting for phone",
-                    RelayStatus::PhoneConnected => "Phone connected",
+                    RelayStatus::PhoneConnected => "Connected",
                 }
                 .into();
                 self.relay_error = None;
