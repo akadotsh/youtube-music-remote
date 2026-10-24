@@ -1,0 +1,5 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "youtube-music-remote",
+  "pages_build_output_dir": "dist"
+}
