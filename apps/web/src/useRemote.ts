@@ -109,8 +109,17 @@ export function useRemote(connection: SavedConnection | undefined) {
     };
 
     connect();
+    const refresh = () => {
+      if (document.visibilityState === "visible" && socket.readyState === WebSocket.OPEN) {
+        sendOn(socket, { type: "GET_STATE" });
+      }
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("pageshow", refresh);
     return () => {
       active = false;
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("pageshow", refresh);
       clearTimeout(timer);
       clearTimeout(feedbackTimer.current);
       clearTimeout(searchTimer.current);
