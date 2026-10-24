@@ -493,6 +493,12 @@ impl Player {
                     .flex()
                     .items_center()
                     .gap_4()
+                    .p_1()
+                    .rounded_full()
+                    .border_1()
+                    .border_color(glass_border(cx.theme().is_dark()))
+                    .bg(glass_surface(cx.theme().is_dark()))
+                    .shadow_lg()
                     .child(
                         Button::new("previous")
                             .large()
@@ -547,8 +553,8 @@ impl Player {
             .p_5()
             .rounded_2xl()
             .border_1()
-            .border_color(cx.theme().border.opacity(0.5))
-            .bg(cx.theme().tokens.muted.opacity(0.6))
+            .border_color(cx.theme().border.opacity(0.45))
+            .bg(cx.theme().tokens.background.opacity(0.72))
             .child(div().text_base().font_semibold().child("Connect your phone"))
             .child(
                 div()
@@ -601,7 +607,7 @@ impl Player {
 fn apply_music_remote_theme(cx: &mut App) {
     Theme::update(cx, |theme| {
         let dark = theme.is_dark();
-        let background = color(if dark { 0x1b1d23 } else { 0xe0dbd2 });
+        let background = color(if dark { 0x1b1d23 } else { 0xe0dbd2 }).opacity(0.58);
         let foreground = color(if dark { 0xf3efe8 } else { 0x292a2e });
         let muted = color(if dark { 0x34353a } else { 0xd9d5ce });
         let muted_foreground = color(if dark { 0xbcb7ae } else { 0x615e59 });
@@ -638,6 +644,14 @@ fn color(hex: u32) -> Hsla {
     rgb(hex).into()
 }
 
+fn glass_surface(dark: bool) -> Hsla {
+    color(0xffffff).opacity(if dark { 0.1 } else { 0.36 })
+}
+
+fn glass_border(dark: bool) -> Hsla {
+    color(0xffffff).opacity(if dark { 0.2 } else { 0.7 })
+}
+
 impl Drop for Player {
     fn drop(&mut self) {
         if let Some(cancelled) = &self.relay_cancel {
@@ -655,7 +669,6 @@ impl Render for Player {
             .flex_col()
             .items_center()
             .gap_6()
-            .bg(cx.theme().tokens.background)
             .text_color(cx.theme().foreground)
             .p_6()
             .child(
@@ -666,6 +679,12 @@ impl Render for Player {
                     .items_center()
                     .justify_between()
                     .gap_3()
+                    .p_3()
+                    .rounded_2xl()
+                    .border_1()
+                    .border_color(glass_border(cx.theme().is_dark()))
+                    .bg(glass_surface(cx.theme().is_dark()))
+                    .shadow_lg()
                     .child(
                         div()
                             .flex()
@@ -809,9 +828,10 @@ fn main() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
                     title: Some("Music Remote".into()),
+                    appears_transparent: true,
                     ..Default::default()
                 }),
-                window_background: WindowBackgroundAppearance::Opaque,
+                window_background: WindowBackgroundAppearance::Blurred,
                 window_min_size: Some(size(px(400.), px(560.))),
                 ..Default::default()
             },
