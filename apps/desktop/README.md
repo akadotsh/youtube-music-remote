@@ -1,8 +1,8 @@
 # Desktop controller
 
-This Rust controller reads and controls the current macOS music session while ignoring browser video sessions. YouTube Music in Chrome additionally supports search and tab-specific volume. Playback remains in the original application.
+This Rust controller reads and controls the current macOS or Windows media session while ignoring browser video sessions on macOS. YouTube Music in Chrome on macOS also supports search and tab-specific volume. Playback remains in the original application.
 
-The GPUI desktop app shows the active song, artwork, playback progress and media controls. Run it during development with:
+The GPUI desktop app shows the active song, artwork where available, playback progress and media controls. Run it during development with:
 
 ```sh
 pnpm desktop:run
@@ -10,9 +10,9 @@ pnpm desktop:run
 
 It opens as a normal Dock application and exits when its window is closed. The current interface is a functional baseline that can be restyled once the final design is ready.
 
-After deploying the Cloudflare relay, paste its URL into **Phone pairing** and create a code. The relay connection is saved in `~/Library/Application Support/YouTube Music Remote/connection.json` with owner-only permissions and restored on the next launch.
+After deploying the Cloudflare relay, paste its URL into **Phone pairing** and create a code. The relay connection is saved in the platform's application data directory and restored on the next launch.
 
-The packaged application includes [`mediaremote-adapter`](https://github.com/ungive/mediaremote-adapter), so users do not need Homebrew or a separate media-control installation.
+The macOS packaged application includes [`mediaremote-adapter`](https://github.com/ungive/mediaremote-adapter). Windows uses the built-in Global System Media Transport Controls API.
 
 ## Setup
 
@@ -22,9 +22,11 @@ pnpm desktop:prepare-adapter
 pnpm desktop:check
 ```
 
-CMake and Xcode Command Line Tools are build-time dependencies only. Build the self-contained application with `pnpm desktop:bundle`; the result is written to `target/bundle/macos/YouTube Music Remote.app`.
+On Windows, install the Visual Studio C++ build tools and run `pnpm desktop:check`; the MediaRemote adapter setup applies only to macOS.
 
-In Chrome, enable **View > Developer > Allow JavaScript from Apple Events**. This lets the desktop app address the YouTube Music tab directly without bringing it to the foreground. Approve the macOS Automation prompt the first time the app connects to Chrome.
+CMake and Xcode Command Line Tools are macOS build-time dependencies only. Build with `pnpm desktop:bundle`; macOS output is written to `target/bundle/macos/YouTube Music Remote.app`, and Windows output to `target/bundle/windows/YouTube Music Remote.exe`.
+
+On macOS, enable **View > Developer > Allow JavaScript from Apple Events** in Chrome. This lets the desktop app address the YouTube Music tab directly without bringing it to the foreground. Approve the macOS Automation prompt the first time the app connects to Chrome.
 
 ## Commands
 
@@ -41,7 +43,9 @@ cargo run --bin yt-remote-media -- seek 60
 
 ## Limitations
 
-- MediaRemote is a private Apple framework. macOS updates can break it without notice; rerun `check` after an OS update.
+- macOS MediaRemote is a private Apple framework. macOS updates can break it without notice; rerun `check` after an OS update.
+- Windows reads the active player through GSMTC. The Windows API does not provide artwork or system output volume through this interface.
+- Windows build output is a standalone `.exe` bundle; run `pnpm desktop:bundle` from Windows with Rust and the Visual Studio C++ build tools installed.
 - Direct tab enhancements currently support Google Chrome. Other browsers use the active macOS Now Playing session.
 - YouTube Music page markup can change; update the selectors in `youtube_music.rs` if controls stop resolving.
 - Seek, artwork and metadata availability depend on the player.

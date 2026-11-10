@@ -1,13 +1,16 @@
-use std::{
-    io,
-    process::{Child, Command, Stdio},
-};
+use std::io;
+#[cfg(not(windows))]
+use std::process::{Child, Command, Stdio};
 
 #[derive(Default)]
 pub struct IdleSleepGuard {
+    #[cfg(not(windows))]
     process: Option<Child>,
+    #[cfg(windows)]
+    active: bool,
 }
 
+#[cfg(not(windows))]
 impl IdleSleepGuard {
     pub fn set_active(&mut self, active: bool) -> io::Result<()> {
         if !active {
@@ -35,6 +38,27 @@ impl IdleSleepGuard {
     }
 }
 
+#[cfg(windows)]
+impl IdleSleepGuard {
+    pub fn set_active(&mut self, active: bool) -> io::Result<()> {
+        use windows::Win32::System::Power::{
+            ES_CONTINUOUS, ES_SYSTEM_REQUIRED, SetThreadExecutionState,
+        };
+
+        let state = if active {
+            ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+        } else {
+            ES_CONTINUOUS
+        };
+        if unsafe { SetThreadExecutionState(state) }.0 == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        self.active = active;
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
 impl Drop for IdleSleepGuard {
     fn drop(&mut self) {
         if let Err(error) = self.release() {
@@ -43,6 +67,16 @@ impl Drop for IdleSleepGuard {
     }
 }
 
+#[cfg(windows)]
+impl Drop for IdleSleepGuard {
+    fn drop(&mut self) {
+        if self.active {
+            let _ = self.set_active(false);
+        }
+    }
+}
+
+#[cfg(not(windows))]
 fn assertion_command() -> Command {
     let mut command = Command::new("/usr/bin/caffeinate");
     // Only block idle system sleep; -w releases protection even if the agent crashes.
@@ -54,7 +88,7 @@ fn assertion_command() -> Command {
     command
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
 

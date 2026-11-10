@@ -45,6 +45,13 @@ pub trait MediaController {
     fn send(&self, command: MediaCommand) -> Result<(), MediaError>;
 }
 
+pub(crate) fn valid_video_id(value: &str) -> bool {
+    value.len() == 11
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
 pub struct MediaRemoteAdapter {
     script: PathBuf,
     framework: PathBuf,

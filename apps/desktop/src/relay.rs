@@ -1,13 +1,14 @@
 use crate::{DesktopController, MediaCommand, MediaController, MediaState, SearchResult};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::{
     env,
     error::Error,
     fs::{self, OpenOptions},
     io::{self, ErrorKind, Write},
     net::TcpStream,
-    os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _},
     path::PathBuf,
     sync::{
         Arc,
@@ -82,7 +83,10 @@ pub fn run_relay(
             match state_controller.current_state() {
                 Ok(state) => {
                     let mut state = PlayerState::from(state);
-                    state.system_volume = crate::system_volume::current().ok();
+                    #[cfg(not(windows))]
+                    {
+                        state.system_volume = crate::system_volume::current().ok();
+                    }
                     if let Ok(message) = serde_json::to_string(&DesktopMessage::State { state }) {
                         let _ = states_tx.try_send(message);
                     }
@@ -129,19 +133,35 @@ pub fn save_connection(connection: &SavedConnection) -> RelayResult<()> {
     let path = settings_path().ok_or("could not locate the user settings directory")?;
     let directory = path.parent().ok_or("invalid settings path")?;
     fs::create_dir_all(directory)?;
+    #[cfg(unix)]
     fs::set_permissions(directory, fs::Permissions::from_mode(0o700))?;
     let temporary = path.with_extension("tmp");
-    let mut file = OpenOptions::new()
+    let mut file = open_connection_file(&temporary)?;
+    file.write_all(&serde_json::to_vec(connection)?)?;
+    file.sync_all()?;
+    #[cfg(unix)]
+    fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))?;
+    fs::rename(temporary, path)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn open_connection_file(path: &std::path::Path) -> io::Result<fs::File> {
+    OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
         .mode(0o600)
-        .open(&temporary)?;
-    file.write_all(&serde_json::to_vec(connection)?)?;
-    file.sync_all()?;
-    fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))?;
-    fs::rename(temporary, path)?;
-    Ok(())
+        .open(path)
+}
+
+#[cfg(windows)]
+fn open_connection_file(path: &std::path::Path) -> io::Result<fs::File> {
+    OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
 }
 
 fn connect_once(
@@ -309,8 +329,8 @@ fn execute(controller: &dyn MediaController, command: RelayCommand) -> RelayResu
         {
             Ok(controller.send(MediaCommand::SetSystemVolume(volume))?)
         }
-        RelayCommand::SetSystemVolume { .. } => Err("Mac volume must be between 0 and 1".into()),
-        RelayCommand::PlaySong { video_id } if crate::youtube_music::valid_video_id(&video_id) => {
+        RelayCommand::SetSystemVolume { .. } => Err("System volume must be between 0 and 1".into()),
+        RelayCommand::PlaySong { video_id } if crate::media::valid_video_id(&video_id) => {
             Ok(controller.send(MediaCommand::PlaySong(video_id))?)
         }
         RelayCommand::PlaySong { .. } => Err("Invalid song identifier".into()),
@@ -355,6 +375,13 @@ fn is_pairing_code(value: &str) -> bool {
 }
 
 fn settings_path() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        return env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .map(|app_data| app_data.join("YouTube Music Remote/connection.json"));
+    }
+    #[cfg(not(windows))]
     env::var_os("HOME")
         .map(PathBuf::from)
         .map(|home| home.join("Library/Application Support/YouTube Music Remote/connection.json"))

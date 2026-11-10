@@ -5,20 +5,21 @@
   <img src="docs/screenshots/mobile-player.jpeg" alt="Phone remote showing artwork, track information, seeking, playback controls and the volume, search and settings buttons" width="300">
 </p>
 
-Control music playing on your Mac from your phone. Music plays on the Mac; your phone is the remote, not an audio streaming destination.
+Control music playing on your Mac or Windows PC from your phone. Music plays on the computer; your phone is the remote, not an audio streaming destination.
 
-The desktop agent controls the active music session in Safari, Chrome, or another compatible player. Browser video sessions are ignored. YouTube Music in Chrome additionally supports search and tab-specific volume. The installable PWA sends commands through your self-hosted relay. Album artwork shown in the screenshots belongs to its respective owners.
+The desktop agent controls the active music session in a compatible player. On Mac it supports Safari, Chrome, and other compatible players; on Windows it uses the active Windows media session. The installable PWA sends commands through your self-hosted relay. Album artwork shown in the screenshots belongs to its respective owners.
 
 ## What works
 
 - Play, pause, previous, next, and seeking
-- Phone volume slider for the YouTube Music tab, independent of other Mac audio
-- Vertical Music and Mac volume sliders, opened from the speaker button in the PWA header
-- Separate Mac output-volume control, affecting all system audio; hidden when unavailable
+- macOS: Phone volume slider for the YouTube Music tab, independent of other Mac audio
+- macOS: Vertical Music and Mac volume sliders, opened from the speaker button in the PWA header
+- macOS: Separate Mac output-volume control, affecting all system audio; hidden when unavailable
 - Search songs from the phone and play a result in the existing YouTube Music tab
 - Current title, artist, artwork, duration, and playback position
 - The active music session stays selected across compatible browsers and players
 - A native GPUI desktop player with live media updates
+- Windows playback control through Global System Media Transport Controls
 - Compact now-playing controls remain available while browsing phone search results
 - Optional **Keep awake while playing** checkbox in the desktop agent
 - Light and dark appearance support
@@ -27,7 +28,7 @@ The desktop agent controls the active music session in Safari, Chrome, or anothe
 
 ## How it works
 
-1. Run the desktop agent and start playing music in a compatible browser or player on your Mac.
+1. Run the desktop agent and start playing music in a compatible browser or player on your computer.
 2. Deploy your own relay and PWA using the steps below.
 3. In the desktop agent, select **Connect phone**, enter your relay URL, and create a pairing code.
 4. Open the PWA on your phone and enter the same relay URL and pairing code.
@@ -37,19 +38,21 @@ There is no shared hosted relay: each user deploys their own. The relay carries 
 
 ## Limitations
 
-- The Mac must stay awake and connected to the internet, with the desktop agent running. Manual Sleep and lid-close sleep interrupt playback and phone control.
-- YouTube Music search and tab-specific volume need Chrome with **View → Developer → Allow JavaScript from Apple Events** enabled. macOS may also ask you to allow the agent to control Chrome.
+- The desktop computer must stay awake and connected to the internet, with the desktop agent running. Manual Sleep interrupts playback and phone control; closing the lid also sleeps most Macs.
+- YouTube Music search and tab-specific volume need Chrome with **View → Developer → Allow JavaScript from Apple Events** enabled on macOS. macOS may also ask you to allow the agent to control Chrome.
 - Search currently supports songs, not playlist browsing or playlist search. Selecting a result plays it in the existing Music tab.
 - Some audio outputs do not expose Mac system-volume control. Music volume remains separate from Mac output volume.
-- Playback control depends on the active player publishing a macOS media session. YouTube Music search and tab-specific volume remain Chrome-only.
-- The desktop bundle is ad-hoc signed, not notarized. The PWA is currently tested on Android; other mobile platforms are not verified.
+- Windows playback control depends on the active player publishing a Windows media session. YouTube Music search and tab-specific volume remain macOS Chrome-only.
+- The macOS desktop bundle is ad-hoc signed, not notarized. The PWA is currently tested on Android; other mobile platforms are not verified.
 
 ## Requirements
 
 - Node.js 20 or newer
 - pnpm 10
 - Rust 1.92 or newer
-- CMake and Xcode Command Line Tools (source builds only)
+- CMake and Xcode Command Line Tools on macOS (source builds only)
+- Visual Studio C++ build tools on Windows (source builds only)
+- Windows 10 version 1809 or newer
 - A free Cloudflare account
 
 ## Install and verify
@@ -61,13 +64,13 @@ pnpm build
 pnpm desktop:check
 ```
 
-Create a self-contained, ad-hoc signed macOS application with `pnpm desktop:bundle`. End users of the bundle do not need Homebrew, CMake, Rust, or `media-control`.
+Create a desktop bundle with `pnpm desktop:bundle`. On macOS it creates an ad-hoc signed app; on Windows it creates a standalone executable. End users do not need Rust or build tools.
 
 ### Keep awake while playing
 
-Enable **Keep awake while playing** in the desktop agent to prevent idle system sleep during playback. The display can still turn off, and the Mac can stay locked. Protection is released when playback pauses or stops, media-state reading fails, the checkbox is cleared, or the agent exits. The checkbox starts unchecked each launch; it does not change macOS power settings permanently.
+Enable **Keep awake while playing** in the desktop agent to prevent idle system sleep during playback. The display can still turn off, and the computer can stay locked. Protection is released when playback pauses or stops, media-state reading fails, the checkbox is cleared, or the agent exits. The checkbox starts unchecked each launch; it does not change persistent power settings.
 
-This does not override **Apple menu → Sleep**, closing the lid, or macOS safety-related sleep. Keeping the Mac awake uses more battery than sleep. Leave the agent running and use **Lock Screen**, rather than Sleep, when controlling music from your phone.
+On macOS, this does not override **Apple menu → Sleep**, closing the lid, or macOS safety-related sleep. Keeping the computer awake uses more battery than sleep. Leave the agent running and use **Lock Screen**, rather than Sleep, when controlling music from your phone.
 
 ## Deploy the relay
 

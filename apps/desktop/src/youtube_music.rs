@@ -248,7 +248,7 @@ fn command_script(command: &MediaCommand) -> Result<String, MediaError> {
                 "Mac volume does not use Chrome".into(),
             ));
         }
-        MediaCommand::PlaySong(video_id) if valid_video_id(video_id) => {
+        MediaCommand::PlaySong(video_id) if crate::media::valid_video_id(video_id) => {
             PLAY_SONG_COMMAND.replace("VIDEO_ID", video_id)
         }
         MediaCommand::PlaySong(_) => {
@@ -259,15 +259,8 @@ fn command_script(command: &MediaCommand) -> Result<String, MediaError> {
     })
 }
 
-pub(crate) fn valid_video_id(value: &str) -> bool {
-    value.len() == 11
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
-}
-
 fn valid_search_result(result: &SearchResult) -> bool {
-    valid_video_id(&result.video_id)
+    crate::media::valid_video_id(&result.video_id)
         && !result.title.trim().is_empty()
         && result.title.encode_utf16().count() <= 500
         && result.artist.encode_utf16().count() <= 500

@@ -14,7 +14,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     match arguments.first().map(String::as_str) {
         Some("check") => {
             controller.check_compatibility()?;
+            #[cfg(target_os = "macos")]
             println!("MediaRemote is working on this Mac.");
+            #[cfg(target_os = "windows")]
+            println!("Windows media controls are available.");
         }
         Some("status") => match controller.current_state()? {
             Some(state) => print_state(&state)?,
@@ -79,7 +82,7 @@ fn time(seconds: Option<f64>) -> String {
 
 const USAGE: &str = "\
 Usage: yt-remote-media <command>\n\n\
-  check              Verify MediaRemote compatibility\n\
+  check              Verify system media controls\n\
   status             Print the active media session\n\
   play               Start playback\n\
   pause              Pause playback\n\
